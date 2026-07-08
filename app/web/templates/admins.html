@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Модераторы{% endblock %}
+{% block content %}
+<h3 class="mb-4">Модераторы и администраторы</h3>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Добавить</h5>
+    <form method="post" action="/admins" class="row g-2">
+      <div class="col-md-3">
+        <input class="form-control" name="username" placeholder="Логин" required>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" name="role">
+          <option value="viewer">viewer</option>
+          <option value="moderator">moderator</option>
+          <option value="admin">admin</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <input class="form-control" name="telegram_id" placeholder="Telegram ID (для бота)">
+      </div>
+      <div class="col-md-3">
+        <input class="form-control" type="password" name="password" placeholder="Пароль для веб-входа (опционально)">
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary mt-2" type="submit">Добавить</button>
+      </div>
+    </form>
+    <small class="text-muted">
+      Telegram ID нужен, чтобы модератор получал посты от бота. Пароль нужен только для входа в веб-панель.
+    </small>
+  </div>
+</div>
+
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>ID</th><th>Логин</th><th>Роль</th><th>Telegram ID</th><th>Активен</th><th></th></tr></thead>
+  <tbody>
+    {% for a in admins %}
+    <tr>
+      <td>{{ a.id }}</td>
+      <td>{{ a.username }}</td>
+      <td>{{ a.role }}</td>
+      <td>{{ a.telegram_id or "—" }}</td>
+      <td>{% if a.active %}<span class="badge text-bg-success">да</span>{% else %}<span class="badge text-bg-secondary">нет</span>{% endif %}</td>
+      <td class="text-nowrap">
+        <form method="post" action="/admins/{{ a.id }}/toggle" class="d-inline">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ "Деактивировать" if a.active else "Активировать" }}</button>
+        </form>
+        <form method="post" action="/admins/{{ a.id }}/delete" class="d-inline" onsubmit="return confirm('Удалить?');">
+          <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Источники{% endblock %}
+{% block content %}
+<h3 class="mb-4">Источники</h3>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="card-title">Добавить источник</h5>
+    <form method="post" action="/sources" class="row g-2">
+      <div class="col-md-3">
+        <input class="form-control" name="name" placeholder="Название" required>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" name="type">
+          <option value="rss">RSS / Atom / Blog</option>
+          <option value="html">HTML (CSS-селекторы)</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <input class="form-control" name="url" placeholder="URL" required>
+      </div>
+      <div class="col-md-2">
+        <input class="form-control" name="config" placeholder='config JSON, напр. {"item_selector": ".item"}'>
+      </div>
+      <div class="col-md-2">
+        <input class="form-control" name="filters" placeholder='filters JSON, напр. {"min_length": 100}'>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary mt-2" type="submit">Добавить</button>
+      </div>
+    </form>
+    <small class="text-muted">
+      Для HTML-источников обязателен <code>item_selector</code> в config; см. также
+      <code>title_selector</code>, <code>text_selector</code>, <code>url_selector</code>, <code>media_selector</code>.
+    </small>
+  </div>
+</div>
+
+<table class="table table-sm bg-white align-middle">
+  <thead>
+    <tr><th>ID</th><th>Название</th><th>Тип</th><th>URL</th><th>Активен</th><th>Последняя проверка</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for source in sources %}
+    <tr>
+      <td>{{ source.id }}</td>
+      <td>{{ source.name }}</td>
+      <td>{{ source.type }}</td>
+      <td class="text-truncate" style="max-width: 250px;"><a href="{{ source.url }}" target="_blank" rel="noopener">{{ source.url }}</a></td>
+      <td>{% if source.active %}<span class="badge text-bg-success">да</span>{% else %}<span class="badge text-bg-secondary">нет</span>{% endif %}</td>
+      <td>{{ source.last_checked.strftime("%Y-%m-%d %H:%M") if source.last_checked else "—" }}</td>
+      <td class="text-nowrap">
+        <form method="post" action="/sources/{{ source.id }}/run" class="d-inline">
+          <button class="btn btn-sm btn-outline-primary" type="submit">Запустить</button>
+        </form>
+        <form method="post" action="/sources/{{ source.id }}/toggle" class="d-inline">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ "Выключить" if source.active else "Включить" }}</button>
+        </form>
+        <form method="post" action="/sources/{{ source.id }}/delete" class="d-inline" onsubmit="return confirm('Удалить источник?');">
+          <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-muted">Источников пока нет</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

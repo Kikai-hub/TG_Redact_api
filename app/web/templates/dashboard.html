@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Дашборд{% endblock %}
+{% block content %}
+<h3 class="mb-4">Дашборд</h3>
+<div class="row g-3 mb-4">
+  <div class="col-md-2">
+    <div class="card stat-card text-bg-primary"><div class="card-body">
+      <div class="fs-2">{{ stats.total_today }}</div><div>Постов сегодня</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-bg-success"><div class="card-body">
+      <div class="fs-2">{{ stats.published_today }}</div><div>Опубликовано сегодня</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-bg-danger"><div class="card-body">
+      <div class="fs-2">{{ stats.rejected_today }}</div><div>Отклонено сегодня</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-bg-warning"><div class="card-body">
+      <div class="fs-2">{{ stats.pending }}</div><div>На модерации</div>
+    </div></div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-bg-secondary"><div class="card-body">
+      <div class="fs-2">{{ stats.active_sources }}/{{ stats.total_sources }}</div><div>Активных источников</div>
+    </div></div>
+  </div>
+</div>
+
+<h5>Последние посты</h5>
+<table class="table table-sm bg-white">
+  <thead><tr><th>ID</th><th>Заголовок</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
+  <tbody>
+    {% for post in recent_posts %}
+    <tr>
+      <td>{{ post.id }}</td>
+      <td>{{ post.original_title }}</td>
+      <td><span class="badge text-bg-light border">{{ post.status }}</span></td>
+      <td>{{ post.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td><a href="/posts/{{ post.id }}">Открыть</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-muted">Постов пока нет</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Посты{% endblock %}
+{% block content %}
+<h3 class="mb-4">Посты</h3>
+<div class="btn-group mb-3">
+  <a class="btn btn-sm btn-outline-secondary {{ 'active' if not status }}" href="/posts">Все</a>
+  {% for s in ["pending", "processed", "moderated", "published", "rejected", "error"] %}
+  <a class="btn btn-sm btn-outline-secondary {{ 'active' if status == s }}" href="/posts?status={{ s }}">{{ s }}</a>
+  {% endfor %}
+</div>
+
+<table class="table table-sm bg-white align-middle">
+  <thead><tr><th>ID</th><th>Заголовок</th><th>Источник</th><th>Статус</th><th>Создан</th><th></th></tr></thead>
+  <tbody>
+    {% for post in posts %}
+    <tr>
+      <td>{{ post.id }}</td>
+      <td>{{ post.original_title }}</td>
+      <td>{{ post.source_id }}</td>
+      <td><span class="badge text-bg-light border">{{ post.status }}</span></td>
+      <td>{{ post.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td><a href="/posts/{{ post.id }}">Открыть</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="text-muted">Нет постов с таким статусом</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

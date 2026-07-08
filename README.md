@@ -1,0 +1,167 @@
+# Новостной агрегатор с модерацией
+
+Telegram-бот + веб-панель: собирает новости из RSS/HTML-источников, переписывает их
+через AI в шуточном стиле по заданному JSON-формату, отправляет на модерацию
+администраторам в личку боту и публикует одобренные посты в целевой канал.
+
+Реализация по [TZ.md](TZ.md). Статус: **рабочий MVP**, см. раздел
+["Что не реализовано в этой версии"](#что-не-реализовано-в-этой-версии) — эти пункты
+осознанно отложены, а не забыты.
+
+## Стек
+
+Python 3.11, FastAPI (JSON API + серверный Jinja2/Bootstrap 5 веб-интерфейс),
+aiogram 3 (бот), SQLAlchemy 2 + Alembic, PostgreSQL, Redis, Celery (парсинг и
+AI-обработка), Docker Compose, Nginx.
+
+## Структура проекта
+
+```
+app/
+  config.py          настройки из переменных окружения
+  models.py           Source, Post, Media, Admin, Settings, Log
+  api/                 JSON REST API (/api/...)
+  web/                 серверный веб-интерфейс (Jinja2 + Bootstrap)
+  bot/                 aiogram-бот и модерационные хендлеры
+  tasks/               Celery: parsing, ai_processing, publishing
+  services/
+    parsers/            rss.py, html.py — добавление нового типа источника = новый файл здесь
+    ai_client.py         провайдер-агностичный клиент (openai/anthropic/custom)
+    crypto.py             шифрование секретов (Fernet/AES) для settings_store
+    dedup.py, filters.py, formatting.py, telegram_sender.py, settings_store.py
+alembic/               миграции БД
+scripts/seed_admin.py  создание первого администратора
+docker-compose.yml     postgres, redis, migrate, app, bot, celery-worker, celery-beat, nginx
+```
+
+## Быстрый старт (Docker, рекомендуется)
+
+1. Установите Docker и Docker Compose на сервере/машине.
+2. Скопируйте `.env.example` в `.env` и заполните:
+   - `POSTGRES_PASSWORD`, `JWT_SECRET` — любые случайные строки
+   - `SETTINGS_ENCRYPTION_KEY` — **обязательно**, иначе `migrate` откажется стартовать.
+     Сгенерировать: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+   - `TELEGRAM_BOT_TOKEN` — получить у [@BotFather](https://t.me/BotFather)
+   - `TARGET_CHANNEL_ID` — chat_id канала, куда публикуются посты (бот должен быть
+     администратором канала); можно получить, переслав сообщение из канала боту
+     [@userinfobot](https://t.me/userinfobot) или через `getUpdates`
+   - `AI_PROVIDER` / `AI_API_KEY` — `openai`, `anthropic` или `custom_openai_compatible`
+     (последнее — для локальных/самохостед моделей с OpenAI-совместимым API; тогда
+     дополнительно укажите `AI_API_BASE`)
+
+   `TELEGRAM_BOT_TOKEN`/`AI_API_KEY`/`AI_PROVIDER`/`AI_API_BASE` — это только
+   значения для первого запуска: при старте `migrate` они шифруются и один раз
+   копируются в БД, после чего редактируются в веб-панели (Настройки → admin),
+   а не в `.env`. Токен бота требует `docker compose restart bot` после смены;
+   ключ и провайдер AI применяются сразу.
+3. Запустите:
+   ```
+   docker compose up -d --build
+   ```
+   Сервис `migrate` применит миграции БД перед стартом остальных сервисов.
+4. Создайте первого администратора:
+   ```
+   docker compose exec app python scripts/seed_admin.py --username root --password ВАШ_ПАРОЛЬ --role admin --telegram-id ВАШ_TELEGRAM_ID
+   ```
+   `--telegram-id` — ваш числовой Telegram ID (узнать у [@userinfobot](https://t.me/userinfobot)),
+   нужен, чтобы бот присылал вам посты на модерацию.
+5. Откройте `http://<сервер>/` — веб-панель. Добавьте источник (раздел «Источники»),
+   при необходимости отредактируйте промпт/пример формата в «Настройках», напишите
+   боту `/start` в Telegram.
+
+## Локальная разработка без Docker
+
+```
+python -m venv .venv && . .venv/Scripts/activate   # Windows Git Bash: source .venv/Scripts/activate
+pip install -r requirements.txt
+cp .env.example .env   # укажите DATABASE_URL/REDIS_URL на локальные instance'ы Postgres/Redis
+alembic upgrade head
+uvicorn app.main:app --reload
+# в отдельных терминалах:
+celery -A app.tasks.celery_app.celery_app worker --loglevel=info
+celery -A app.tasks.celery_app.celery_app beat --loglevel=info
+python -m app.bot.main
+```
+
+## Добавление источника
+
+- **RSS/Atom/блог**: тип `rss`, `url` — адрес фида. Большинство блогов (включая
+  WordPress/Medium) отдают RSS, поэтому отдельный парсер под "blog" не нужен.
+- **HTML**: тип `html`, в `config` — CSS-селекторы:
+  ```json
+  {
+    "item_selector": ".news-item",
+    "title_selector": ".title",
+    "text_selector": ".summary",
+    "url_selector": "a",
+    "url_attr": "href",
+    "media_selector": "img",
+    "media_attr": "src"
+  }
+  ```
+- `filters` (опционально): `{"keywords": [...], "stop_words": [...], "min_length": 100}`.
+
+## Пайплайн
+
+Celery beat каждые 5 минут проверяет источники; источник реально опрашивается,
+только если с последнего опроса прошло `parse_interval_minutes` (настраивается в
+веб-панели, без перезапуска). Новые посты дедуплицируются по хешу
+`title+url` в окне `dedup_window_days`. Прошедшие фильтры и дедуп посты уходят в
+AI-обработку → результат рассылается всем активным модераторам/админам с
+`telegram_id` через бота с кнопками «Доработать» / «Опубликовать» / «Отказаться».
+«Опубликовать» ставит задачу в очередь на отправку в `target_channel_id`.
+
+## Секреты (Telegram-токен, AI-ключ)
+
+Хранятся в таблице `settings`, но не как обычные настройки: `app/services/crypto.py`
+шифрует их (Fernet/AES-128, ключ — `SETTINGS_ENCRYPTION_KEY`) перед записью в БД.
+`settings_store.get_all_settings()` и оба эндпоинта `GET /settings` / `GET
+/api/settings` **никогда** не возвращают расшифрованное значение — только флаг
+«задан/не задан» (`is_secret_configured`). Расшифровка происходит только в
+момент реального исходящего запроса (вызов Telegram/AI API) внутри Celery-задач
+и процесса бота. В форме настроек поля токена/ключа всегда пустые при открытии
+страницы — ввод нового значения заменяет старое, пустое поле оставляет как
+есть, отдельный чекбокс «Очистить» — единственный способ явно удалить секрет
+(так исключён баг с «маскированное значение случайно сохранено как новый ключ»).
+Все ответы сервера (кроме `/static`) отдаются с `Cache-Control: no-store`, чтобы
+прокси/браузер не кешировали страницы админки.
+
+`SETTINGS_ENCRYPTION_KEY` не ротируется «на лету»: это симметричный ключ Fernet
+без версионирования, поэтому смена ключа делает уже сохранённые секреты
+нерасшифровываемыми — после смены `SETTINGS_ENCRYPTION_KEY` придётся заново
+ввести токен бота и AI-ключ в Настройках.
+
+## Новые миграции
+
+```
+alembic revision --autogenerate -m "описание изменения"
+alembic upgrade head
+```
+
+## Что не реализовано в этой версии
+
+Осознанно отложено, чтобы поставить рабочий сквозной pipeline быстрее — архитектура
+не мешает добавить это позже:
+
+- **Парсинг Telegram-каналов/чатов через Telethon** — требует ручной авторизации по
+  номеру телефона (генерация session string) вне `docker-compose up`. Источники `rss`
+  и `html` покрывают сайты/блоги без этого шага. Добавляется как
+  `app/services/parsers/telegram_source.py` по тому же интерфейсу `BaseParser`,
+  что и `rss.py`/`html.py`.
+- **OAuth-вход в веб-панель** — сейчас логин/пароль + JWT в httpOnly-cookie.
+- **Двухфакторная аутентификация**.
+- **S3/MinIO для медиа** — сейчас Docker volume `media_data`; поле `Media.file_path`
+  спроектировано так, чтобы смену бэкенда можно было сделать без миграции схемы.
+- **Prometheus-метрики**.
+- **Локализация интерфейса на английский** — сейчас только русский, но строки не
+  разбросаны по коду бессистемно, так что добавить `i18n` реально.
+- **Нагрузочное тестирование и документированное горизонтальное масштабирование
+  воркеров** — `celery-worker` можно масштабировать (`docker compose up --scale
+  celery-worker=3`), но это не протестировано под нагрузкой из ТЗ (100+ источников,
+  500 постов/цикл).
+- **Автоматическое сканирование утечек секретов (gitleaks/trufflehog в CI) и API-ключи
+  с зоной действия/ротацией по сроку** — для одного самохостед-инстанса с секретами
+  только для исходящих запросов (не выдаваемыми третьим лицам) это избыточно;
+  вместо этого секреты шифруются в БД и никогда не попадают в ответы API/HTML
+  (см. «Секреты» выше). Если репозиторий уйдёт в публичный GitHub — стоит добавить
+  `gitleaks` в CI как отдельный шаг.

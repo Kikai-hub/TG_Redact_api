@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Логи{% endblock %}
+{% block content %}
+<h3 class="mb-4">Журнал событий</h3>
+
+<form method="get" action="/logs" class="row g-2 mb-3">
+  <div class="col-md-3">
+    <select class="form-select" name="level">
+      <option value="">Все уровни</option>
+      {% for l in ["debug", "info", "warning", "error"] %}
+      <option value="{{ l }}" {{ "selected" if level == l }}>{{ l }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" name="module">
+      <option value="">Все модули</option>
+      {% for m in ["parsing", "ai_processing", "publishing", "moderation"] %}
+      <option value="{{ m }}" {{ "selected" if module == m }}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-outline-primary w-100" type="submit">Фильтр</button>
+  </div>
+</form>
+
+<table class="table table-sm bg-white">
+  <thead><tr><th>Время</th><th>Уровень</th><th>Модуль</th><th>Сообщение</th></tr></thead>
+  <tbody>
+    {% for entry in logs %}
+    <tr>
+      <td class="text-nowrap">{{ entry.timestamp.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+      <td><span class="badge text-bg-{{ {'error': 'danger', 'warning': 'warning', 'info': 'info', 'debug': 'secondary'}[entry.level] }}">{{ entry.level }}</span></td>
+      <td>{{ entry.module }}</td>
+      <td>{{ entry.message }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="text-muted">Нет записей</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

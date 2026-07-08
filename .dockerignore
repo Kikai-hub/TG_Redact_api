@@ -1,0 +1,8 @@
+.claude
+.git
+.env
+media
+__pycache__
+*.pyc
+.venv
+*.md

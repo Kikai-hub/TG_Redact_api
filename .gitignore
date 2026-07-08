@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+media/
+*.db
+
+# Claude Code tooling (skills library etc.) — not part of the deployed app
+.claude/

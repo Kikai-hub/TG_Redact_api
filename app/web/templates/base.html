@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Новостной агрегатор{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/custom.css" rel="stylesheet">
+</head>
+<body>
+  {% if admin %}
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">📰 Новостной агрегатор</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="/">Дашборд</a></li>
+          <li class="nav-item"><a class="nav-link" href="/sources">Источники</a></li>
+          <li class="nav-item"><a class="nav-link" href="/posts">Посты</a></li>
+          {% if admin.role == "admin" %}
+          <li class="nav-item"><a class="nav-link" href="/admins">Модераторы</a></li>
+          <li class="nav-item"><a class="nav-link" href="/settings">Настройки</a></li>
+          {% endif %}
+          <li class="nav-item"><a class="nav-link" href="/logs">Логи</a></li>
+        </ul>
+        <span class="navbar-text me-3">{{ admin.username }} ({{ admin.role }})</span>
+        <form method="post" action="/logout" class="d-flex">
+          <button class="btn btn-outline-light btn-sm" type="submit">Выйти</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+  <div class="container-fluid px-4 pb-5">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Пост #{{ post.id }}{% endblock %}
+{% block content %}
+<a href="/posts" class="btn btn-sm btn-link px-0">&larr; К списку постов</a>
+<h3 class="mb-3">Пост #{{ post.id }} <span class="badge text-bg-light border">{{ post.status }}</span></h3>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header">Оригинал</div>
+      <div class="card-body">
+        <h6>{{ post.original_title }}</h6>
+        <pre class="post-text">{{ post.original_text }}</pre>
+        <a href="{{ post.original_url }}" target="_blank" rel="noopener">Ссылка на источник</a>
+        {% if post.raw_media %}
+        <div class="mt-2">
+          {% for m in post.raw_media %}<div><small>{{ m }}</small></div>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header">AI-версия</div>
+      <div class="card-body">
+        {% if post.ai_processed_text %}
+        <form method="post" action="/posts/{{ post.id }}/edit">
+          <div class="mb-2">
+            <label class="form-label">title</label>
+            <input class="form-control" name="title" value="{{ post.ai_processed_text.title }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">intro</label>
+            <textarea class="form-control" name="intro" rows="2">{{ post.ai_processed_text.intro }}</textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">body</label>
+            <textarea class="form-control" name="body" rows="4">{{ post.ai_processed_text.body }}</textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">comment</label>
+            <input class="form-control" name="comment" value="{{ post.ai_processed_text.comment or '' }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">hashtags</label>
+            <input class="form-control" name="hashtags" value="{{ post.ai_processed_text.hashtags or '' }}">
+          </div>
+          <button class="btn btn-outline-primary btn-sm" type="submit">Сохранить правки</button>
+        </form>
+        {% else %}
+        <p class="text-muted">Пост ещё не обработан AI (статус: {{ post.status }}).</p>
+        {% endif %}
+      </div>
+      {% if post.status == "moderated" %}
+      <div class="card-footer d-flex gap-2">
+        <form method="post" action="/posts/{{ post.id }}/approve">
+          <button class="btn btn-success btn-sm" type="submit">✅ Опубликовать</button>
+        </form>
+        <form method="post" action="/posts/{{ post.id }}/reject">
+          <button class="btn btn-danger btn-sm" type="submit">❌ Отказаться</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if history %}
+<h5 class="mt-4">История модерации</h5>
+<ul class="list-group">
+  {% for entry in history %}
+  <li class="list-group-item">
+    <small class="text-muted">{{ entry.timestamp.strftime("%Y-%m-%d %H:%M") }}</small> — {{ entry.message }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<h3 class="mb-4">Настройки</h3>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+<form method="post" action="/settings">
+  <div class="card mb-3">
+    <div class="card-header">AI</div>
+    <div class="card-body">
+      <div class="mb-3">
+        <label class="form-label">Промпт</label>
+        <textarea class="form-control" name="ai_prompt" rows="4">{{ values.ai_prompt }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Пример формата (JSON)</label>
+        <textarea class="form-control" name="ai_example_format" rows="8">{{ values.ai_example_format | tojson(indent=2) }}</textarea>
+      </div>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label">Провайдер</label>
+          <select class="form-select" name="ai_provider">
+            {% for p in ["openai", "anthropic", "custom_openai_compatible"] %}
+            <option value="{{ p }}" {{ "selected" if values.ai_provider == p }}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Модель</label>
+          <input class="form-control" name="ai_model" value="{{ values.ai_model }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">API base (для custom_openai_compatible)</label>
+          <input class="form-control" name="ai_api_base" value="{{ values.ai_api_base }}" placeholder="https://...">
+        </div>
+      </div>
+      <div class="row g-2 mt-1">
+        <div class="col-md-4">
+          <label class="form-label">Temperature</label>
+          <input class="form-control" type="number" step="0.1" name="ai_temperature" value="{{ values.ai_temperature }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Max tokens</label>
+          <input class="form-control" type="number" name="ai_max_tokens" value="{{ values.ai_max_tokens }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">
+            AI API Key
+            {% if secrets.ai_api_key %}<span class="badge text-bg-success">задан</span>{% else %}<span class="badge text-bg-secondary">не задан</span>{% endif %}
+          </label>
+          <input class="form-control" type="password" name="ai_api_key" autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" name="ai_api_key_clear" value="true" id="ai_api_key_clear">
+            <label class="form-check-label small text-muted" for="ai_api_key_clear">Очистить ключ</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Telegram</div>
+    <div class="card-body row g-3">
+      <div class="col-md-6">
+        <label class="form-label">
+          Bot Token
+          {% if secrets.telegram_bot_token %}<span class="badge text-bg-success">задан</span>{% else %}<span class="badge text-bg-secondary">не задан</span>{% endif %}
+        </label>
+        <input class="form-control" type="password" name="telegram_bot_token" autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять">
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" name="telegram_bot_token_clear" value="true" id="telegram_bot_token_clear">
+          <label class="form-check-label small text-muted" for="telegram_bot_token_clear">Очистить токен</label>
+        </div>
+        <small class="text-muted d-block mt-1">
+          После изменения токена перезапустите сервис бота: <code>docker compose restart bot</code> —
+          для AI-обработки и публикации новый токен применяется сразу, без перезапуска.
+        </small>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Target channel chat_id</label>
+        <input class="form-control" name="target_channel_id" value="{{ values.target_channel_id }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header">Парсинг</div>
+    <div class="card-body row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Интервал парсинга (мин)</label>
+        <input class="form-control" type="number" name="parse_interval_minutes" value="{{ values.parse_interval_minutes }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Окно дедупликации (дней)</label>
+        <input class="form-control" type="number" name="dedup_window_days" value="{{ values.dedup_window_days }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Макс. постов за цикл на источник</label>
+        <input class="form-control" type="number" name="max_posts_per_cycle" value="{{ values.max_posts_per_cycle }}">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" type="submit">Сохранить</button>
+</form>
+
+<hr class="my-4">
+
+<h5>Тестовый режим</h5>
+<form method="post" action="/settings/test-ai" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input class="form-control" name="sample_title" placeholder="Заголовок тестовой новости" required>
+  </div>
+  <div class="col-md-6">
+    <input class="form-control" name="sample_text" placeholder="Текст тестовой новости" required>
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-outline-primary w-100" type="submit">Проверить</button>
+  </div>
+</form>
+
+{% if test_result %}
+<div class="card">
+  <div class="card-header">Результат AI</div>
+  <div class="card-body"><pre class="post-text">{{ test_result | tojson(indent=2) }}</pre></div>
+</div>
+{% endif %}
+{% endblock %}

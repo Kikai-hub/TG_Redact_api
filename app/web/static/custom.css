@@ -1,0 +1,12 @@
+body {
+  background-color: #f5f6f8;
+}
+
+.stat-card {
+  border-radius: 0.75rem;
+}
+
+pre.post-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
