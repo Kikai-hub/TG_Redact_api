@@ -1,0 +1,45 @@
+#!/bin/bash
+# tgpars — консольное управление проектом «Новостной агрегатор».
+#
+# Установка на сервере (один раз, из корня проекта):
+#   sudo ln -sf "$(pwd)/scripts/tgpars" /usr/local/bin/tgpars
+#   chmod +x scripts/tgpars
+#
+# После этого команда `tgpars` доступна из любой директории. Скрипт сам
+# находит корень проекта (по своему реальному пути, даже если вызван через
+# симлинк), поэтому его не нужно перенастраивать при обновлениях — новые
+# подкоманды, добавленные в будущем через git pull, появятся сами.
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+PROJECT_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+usage() {
+    cat <<'EOF'
+tgpars — управление проектом «Новостной агрегатор»
+
+Команды:
+  update      Подтянуть обновления из репозитория, пересобрать и перезапустить контейнеры
+  help        Показать список команд
+
+Использование: tgpars <команда>
+EOF
+}
+
+cmd="${1:-help}"
+
+case "$cmd" in
+    update)
+        exec ./scripts/deploy.sh
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Неизвестная команда: $cmd"
+        echo
+        usage
+        exit 1
+        ;;
+esac
