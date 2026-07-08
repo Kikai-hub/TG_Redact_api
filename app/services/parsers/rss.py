@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import feedparser
 from bs4 import BeautifulSoup
 
-from app.services.parsers.base import BaseParser, RawItem
+from app.services.parsers.base import BaseParser, MediaItem, RawItem, guess_media_type
 
 if TYPE_CHECKING:
     from app.models import Source
@@ -58,14 +58,25 @@ def _parse_date(entry) -> datetime | None:
     return datetime.fromtimestamp(time.mktime(struct_time), tz=timezone.utc)
 
 
-def _extract_media(entry) -> list[str]:
-    media: list[str] = []
+def _medium_to_type(medium: str) -> str | None:
+    """Media RSS's medium attribute (image | video | audio | document | executable)."""
+    if medium == "video":
+        return "video"
+    if medium == "image":
+        return "photo"
+    return None
+
+
+def _extract_media(entry) -> list[MediaItem]:
+    media: list[MediaItem] = []
     for enclosure in entry.get("enclosures", []) or []:
         href = enclosure.get("href")
         if href:
-            media.append(href)
+            media.append(MediaItem(url=href, type=guess_media_type(href, enclosure.get("type", ""))))
     for item in entry.get("media_content", []) or []:
         url = item.get("url")
-        if url:
-            media.append(url)
+        if not url:
+            continue
+        media_type = _medium_to_type(item.get("medium", "")) or guess_media_type(url, item.get("type", ""))
+        media.append(MediaItem(url=url, type=media_type))
     return media

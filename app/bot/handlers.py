@@ -7,8 +7,10 @@ from aiogram.types import CallbackQuery, Message
 from app import models
 from app.bot.keyboards import moderation_keyboard
 from app.database import SessionLocal
+from app.services import settings_store
 from app.services.formatting import format_post_text
 from app.services.logging_service import log
+from app.services.telegram_sender import send_moderation_message
 from app.tasks.publishing import publish_post
 
 router = Router()
@@ -145,8 +147,14 @@ async def handle_edit_text(message: Message, state: FSMContext) -> None:
         log(db, "info", f"Post {post.id} edited by {admin.username}", "moderation", {"post_id": post.id})
 
         await message.answer("Обновлённый пост:")
-        await message.answer(
-            format_post_text(ai_data), reply_markup=moderation_keyboard(post.id), parse_mode="HTML"
-        )
+        token = settings_store.get_secret_setting(db, "telegram_bot_token")
+        if token:
+            await send_moderation_message(
+                token, message.chat.id, format_post_text(ai_data), moderation_keyboard(post.id), post.raw_media
+            )
+        else:
+            await message.answer(
+                format_post_text(ai_data), reply_markup=moderation_keyboard(post.id), parse_mode="HTML"
+            )
     finally:
         db.close()

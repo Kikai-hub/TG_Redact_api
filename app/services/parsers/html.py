@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-from app.services.parsers.base import BaseParser, RawItem
+from app.services.parsers.base import BaseParser, MediaItem, RawItem, guess_media_type
 
 if TYPE_CHECKING:
     from app.models import Source
@@ -54,12 +54,13 @@ class HtmlParser(BaseParser):
             url = _select_attr(node, url_selector, url_attr)
             if url:
                 url = urljoin(base_url, url)
-            media = []
+            media: list[MediaItem] = []
             if media_selector:
                 for media_node in node.select(media_selector):
                     src = media_node.get(media_attr)
                     if src:
-                        media.append(urljoin(base_url, src))
+                        media_url = urljoin(base_url, src)
+                        media.append(MediaItem(url=media_url, type=guess_media_type(media_url)))
             if not title or not url:
                 continue
             items.append(RawItem(title=title, text=text or "", url=url, media=media))

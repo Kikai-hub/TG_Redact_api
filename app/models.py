@@ -63,7 +63,7 @@ class Post(Base):
     original_text: Mapped[str] = mapped_column(Text)
     original_url: Mapped[str] = mapped_column(String(2048))
     hash: Mapped[str] = mapped_column(String(64), index=True)
-    raw_media: Mapped[list] = mapped_column(JSON, default=list)  # list of media URLs
+    raw_media: Mapped[list] = mapped_column(JSON, default=list)  # list of {"url": str, "type": "photo"|"video"}
     status: Mapped[str] = mapped_column(String(20), default=PostStatus.pending.value, index=True)
     ai_processed_text: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ai_category: Mapped[str | None] = mapped_column(String(255), nullable=True)

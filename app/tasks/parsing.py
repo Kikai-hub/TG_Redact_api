@@ -67,7 +67,7 @@ def fetch_source(source_id: int) -> None:
                     original_text=item.text,
                     original_url=item.url,
                     hash=post_hash,
-                    raw_media=item.media,
+                    raw_media=[{"url": m.url, "type": m.type} for m in item.media],
                     status=models.PostStatus.processed.value,
                 )
             )

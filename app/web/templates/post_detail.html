@@ -13,8 +13,18 @@
         <pre class="post-text">{{ post.original_text }}</pre>
         <a href="{{ post.original_url }}" target="_blank" rel="noopener">Ссылка на источник</a>
         {% if post.raw_media %}
-        <div class="mt-2">
-          {% for m in post.raw_media %}<div><small>{{ m }}</small></div>{% endfor %}
+        <div class="mt-2 d-flex flex-wrap gap-2">
+          {% for m in post.raw_media %}
+          {% set media_url = m.url if m is mapping else m %}
+          {% set media_type = m.type if m is mapping else "photo" %}
+          <a href="{{ media_url }}" target="_blank" rel="noopener" class="text-center text-decoration-none">
+            {% if media_type == "video" %}
+            <div class="border rounded d-flex align-items-center justify-content-center bg-light" style="width:110px; height:110px;">🎥<br>видео</div>
+            {% else %}
+            <img src="{{ media_url }}" style="width:110px; height:110px; object-fit:cover;" class="rounded border" alt="фото">
+            {% endif %}
+          </a>
+          {% endfor %}
         </div>
         {% endif %}
       </div>

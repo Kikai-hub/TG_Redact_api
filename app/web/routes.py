@@ -22,6 +22,11 @@ from app.tasks.parsing import fetch_source
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+# Jinja2's default tojson filter escapes non-ASCII to \uXXXX (json.dumps'
+# own default) — override so Cyrillic renders readably in the settings page
+# (AI example format, test-ai result). Doesn't affect HTML-safety: <, >, &,
+# ' are still escaped separately by Jinja2's htmlsafe_json_dumps.
+templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False, "sort_keys": True}
 
 
 def _current_admin(request: Request, db: Session) -> models.Admin | None:
