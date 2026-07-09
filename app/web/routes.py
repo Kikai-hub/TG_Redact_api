@@ -18,6 +18,7 @@ from app.security import (
 )
 from app.services import settings_store
 from app.services.ai_client import AIProcessingError, process_with_ai
+from app.services.logging_service import log
 from app.tasks.parsing import fetch_source
 
 router = APIRouter()
@@ -473,6 +474,23 @@ def settings_test_ai(
         "settings.html",
         {"admin": admin, "values": values, "secrets": _secrets_status(db), "test_result": test_result, "error": error},
     )
+
+
+@router.post("/settings/request-update")
+def settings_request_update(request: Request, db: Session = Depends(get_db)):
+    """Flags a pending update for a host-level watcher (scripts/update_watcher.sh,
+    run via cron/systemd outside any container) to pick up and run scripts/deploy.sh.
+    This app never runs docker/git itself — see that script for why."""
+    admin, redirect = _require_role(request, db, "admin")
+    if redirect:
+        return redirect
+    settings_store.set_setting(
+        db,
+        "update_requested",
+        {"requested_at": datetime.now(timezone.utc).isoformat(), "requested_by": admin.username},
+    )
+    log(db, "info", f"Update requested by {admin.username}", "update", {})
+    return RedirectResponse("/settings", status_code=303)
 
 
 # ---------------------------------------------------------------- logs ----

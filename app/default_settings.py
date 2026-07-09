@@ -30,6 +30,7 @@ DEFAULTS: dict[str, object] = {
     "parse_interval_minutes": 45,
     "dedup_window_days": 7,
     "max_posts_per_cycle": 50,
+    "update_requested": None,
 }
 # ai_provider / ai_api_base are seeded from the AI_PROVIDER / AI_API_BASE env
 # vars in settings_store.ensure_defaults_seeded() instead of hardcoded here.

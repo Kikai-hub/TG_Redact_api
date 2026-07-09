@@ -104,6 +104,27 @@
   <button class="btn btn-primary" type="submit">Сохранить</button>
 </form>
 
+<div class="card mb-3">
+  <div class="card-header">Обновление системы</div>
+  <div class="card-body">
+    {% if values.update_requested %}
+    <div class="alert alert-info">
+      Обновление запрошено ({{ values.update_requested.requested_by }}, {{ values.update_requested.requested_at }}) —
+      ожидает обработки на сервере.
+    </div>
+    {% endif %}
+    <form method="post" action="/settings/request-update"
+          onsubmit="return confirm('Запросить обновление и пересборку контейнеров на сервере?');">
+      <button class="btn btn-warning" type="submit">Обновить панель</button>
+    </form>
+    <small class="text-muted d-block mt-2">
+      Кнопка только ставит отметку в базе. Само обновление (git pull + пересборка контейнеров)
+      выполняет <code>scripts/update_watcher.sh</code> на сервере по расписанию (cron/systemd) —
+      см. комментарий в начале этого скрипта для разовой настройки.
+    </small>
+  </div>
+</div>
+
 <hr class="my-4">
 
 <h5>Тестовый режим</h5>
