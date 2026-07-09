@@ -1,20 +1,6 @@
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo
 
-# Cached per-token so a token change (edited in Settings) takes effect on the
-# next call from a Celery worker without restarting the process. The
-# long-polling bot process (app/bot/main.py) still needs a restart to pick up
-# a new token — that's inherent to an active long-poll connection.
-_bots: dict[str, Bot] = {}
-
-
-def get_bot(token: str) -> Bot:
-    bot = _bots.get(token)
-    if bot is None:
-        bot = Bot(token=token)
-        _bots[token] = bot
-    return bot
-
 
 def _normalize_media(media: list | None) -> list[dict]:
     """Post.raw_media entries are {"url": str, "type": "photo"|"video"} dicts.
@@ -47,34 +33,43 @@ async def send_moderation_message(
     if there's one media item, the full album followed by a separate message
     carrying the moderation buttons if there are several (Telegram's API does
     not allow reply_markup on a media group), or just text if there's none.
-    Returns all sent message IDs."""
-    bot = get_bot(token)
+    Returns all sent message IDs.
+
+    Opens a fresh Bot (and aiohttp session) per call rather than reusing a
+    cached one: callers on the Celery side wrap this in a new asyncio.run()
+    per task, which closes its event loop when done, and a session left over
+    from a previous call would be bound to that now-closed loop."""
     items = _normalize_media(media)
+    bot = Bot(token=token)
+    try:
+        if not items:
+            message = await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
+            return [message.message_id]
 
-    if not items:
-        message = await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
-        return [message.message_id]
+        if len(items) == 1:
+            item = items[0]
+            send = bot.send_video if item["type"] == "video" else bot.send_photo
+            message = await send(chat_id, item["url"], caption=text, reply_markup=reply_markup, parse_mode="HTML")
+            return [message.message_id]
 
-    if len(items) == 1:
-        item = items[0]
-        send = bot.send_video if item["type"] == "video" else bot.send_photo
-        message = await send(chat_id, item["url"], caption=text, reply_markup=reply_markup, parse_mode="HTML")
-        return [message.message_id]
-
-    album_messages = await bot.send_media_group(chat_id, _build_media_group(items, text))
-    keyboard_message = await bot.send_message(chat_id, "Действия по посту выше:", reply_markup=reply_markup)
-    return [m.message_id for m in album_messages] + [keyboard_message.message_id]
+        album_messages = await bot.send_media_group(chat_id, _build_media_group(items, text))
+        keyboard_message = await bot.send_message(chat_id, "Действия по посту выше:", reply_markup=reply_markup)
+        return [m.message_id for m in album_messages] + [keyboard_message.message_id]
+    finally:
+        await bot.session.close()
 
 
 async def publish_to_channel(token: str, chat_id: str, text: str, media: list | None = None) -> None:
-    bot = get_bot(token)
     items = _normalize_media(media)
-
-    if not items:
-        await bot.send_message(chat_id, text, parse_mode="HTML")
-    elif len(items) == 1:
-        item = items[0]
-        send = bot.send_video if item["type"] == "video" else bot.send_photo
-        await send(chat_id, item["url"], caption=text, parse_mode="HTML")
-    else:
-        await bot.send_media_group(chat_id, _build_media_group(items, text))
+    bot = Bot(token=token)
+    try:
+        if not items:
+            await bot.send_message(chat_id, text, parse_mode="HTML")
+        elif len(items) == 1:
+            item = items[0]
+            send = bot.send_video if item["type"] == "video" else bot.send_photo
+            await send(chat_id, item["url"], caption=text, parse_mode="HTML")
+        else:
+            await bot.send_media_group(chat_id, _build_media_group(items, text))
+    finally:
+        await bot.session.close()
