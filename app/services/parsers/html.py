@@ -1,3 +1,4 @@
+import re
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
 
 USER_AGENT = "Mozilla/5.0 (compatible; NewsAggregatorBot/1.0)"
 
+_BACKGROUND_IMAGE_RE = re.compile(r"background-image\s*:\s*url\((['\"]?)(.*?)\1\)")
+
 
 class HtmlParser(BaseParser):
     """Generic HTML scraper driven entirely by CSS selectors in Source.config:
@@ -21,7 +24,9 @@ class HtmlParser(BaseParser):
     url_selector    - relative selector for the link element (falls back to the item itself)
     url_attr        - attribute holding the link (default "href")
     media_selector  - relative selector for media elements
-    media_attr      - attribute holding the media URL (default "src")
+    media_attr      - attribute holding the media URL (default "src"); if that attribute is
+                      absent, falls back to a CSS `background-image: url(...)` on the same
+                      element (common for lazy-loaded galleries, e.g. Telegram's t.me/s/ preview)
     base_url        - base URL for resolving relative links (default: source.url)
     """
 
@@ -57,7 +62,7 @@ class HtmlParser(BaseParser):
             media: list[MediaItem] = []
             if media_selector:
                 for media_node in node.select(media_selector):
-                    src = media_node.get(media_attr)
+                    src = media_node.get(media_attr) or _extract_background_image(media_node)
                     if src:
                         media_url = urljoin(base_url, src)
                         media.append(MediaItem(url=media_url, type=guess_media_type(media_url)))
@@ -79,3 +84,11 @@ def _select_attr(node: Tag, selector: str | None, attr: str) -> str | None:
     if target is None:
         return None
     return target.get(attr)
+
+
+def _extract_background_image(node: Tag) -> str | None:
+    style = node.get("style")
+    if not style:
+        return None
+    match = _BACKGROUND_IMAGE_RE.search(style)
+    return match.group(2) if match else None
