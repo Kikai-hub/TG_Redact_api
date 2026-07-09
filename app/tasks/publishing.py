@@ -10,12 +10,15 @@ from app.services.telegram_sender import publish_to_channel
 from app.tasks.celery_app import celery_app
 
 
+PUBLISHABLE_STATUSES = (models.PostStatus.moderated.value, models.PostStatus.scheduled.value)
+
+
 @celery_app.task(name="app.tasks.publishing.publish_post", bind=True, max_retries=2)
 def publish_post(self, post_id: int) -> None:
     db = SessionLocal()
     try:
         post = db.get(models.Post, post_id)
-        if post is None or post.status != models.PostStatus.moderated.value:
+        if post is None or post.status not in PUBLISHABLE_STATUSES:
             return
 
         channel_id = settings_store.get_setting(db, "target_channel_id")
@@ -39,5 +42,21 @@ def publish_post(self, post_id: int) -> None:
         post.published_at = datetime.now(timezone.utc)
         db.commit()
         log(db, "info", f"Published post {post.id}", "publishing", {"post_id": post.id})
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.publishing.publish_due_scheduled_posts")
+def publish_due_scheduled_posts() -> None:
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        due_posts = (
+            db.query(models.Post.id)
+            .filter(models.Post.status == models.PostStatus.scheduled.value, models.Post.scheduled_at <= now)
+            .all()
+        )
+        for (post_id,) in due_posts:
+            publish_post.delay(post_id)
     finally:
         db.close()

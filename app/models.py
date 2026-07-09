@@ -20,6 +20,7 @@ class PostStatus(str, enum.Enum):
     pending = "pending"
     processed = "processed"
     moderated = "moderated"
+    scheduled = "scheduled"
     published = "published"
     rejected = "rejected"
     error = "error"
@@ -71,6 +72,7 @@ class Post(Base):
     moderation_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     source: Mapped["Source"] = relationship(back_populates="posts")
     media: Mapped[list["Media"]] = relationship(back_populates="post", cascade="all, delete-orphan")

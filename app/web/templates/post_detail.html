@@ -4,6 +4,13 @@
 {% block content %}
 <a href="/posts" class="btn btn-sm btn-link px-0">&larr; К списку постов</a>
 <h3 class="mb-3">Пост #{{ post.id }} {{ macros.status_badge(post.status) }}</h3>
+{% if post.scheduled_at %}
+<p class="text-muted">
+  <i class="bi bi-clock"></i>
+  Запланирован на {{ (post.scheduled_at | to_msk).strftime("%Y-%m-%d %H:%M") }} МСК
+  ({{ post.scheduled_at.strftime("%Y-%m-%d %H:%M") }} UTC)
+</p>
+{% endif %}
 
 <div class="row g-3">
   <div class="col-md-6">

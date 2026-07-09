@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -28,6 +28,10 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # (AI example format, test-ai result). Doesn't affect HTML-safety: <, >, &,
 # ' are still escaped separately by Jinja2's htmlsafe_json_dumps.
 templates.env.policies["json.dumps_kwargs"] = {"ensure_ascii": False, "sort_keys": True}
+# Everything is stored/displayed in UTC (server is in the Netherlands) except this one
+# filter: moderators are in Moscow, and post.scheduled_at is a time they chose themselves
+# in the bot (in MSK) — showing it back in MSK here avoids a confusing UTC-vs-MSK mismatch.
+templates.env.filters["to_msk"] = lambda dt: dt + timedelta(hours=3) if dt else None
 
 
 def _current_admin(request: Request, db: Session) -> models.Admin | None:

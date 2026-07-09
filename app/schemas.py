@@ -57,6 +57,7 @@ class PostOut(BaseModel):
     moderation_comment: str | None
     created_at: datetime
     published_at: datetime | None
+    scheduled_at: datetime | None
     media: list[MediaOut] = []
 
 

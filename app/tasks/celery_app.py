@@ -34,4 +34,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.parsing.fetch_all_active_sources",
         "schedule": crontab(minute="*/5"),
     },
+    "tick-publish-due-scheduled-posts": {
+        "task": "app.tasks.publishing.publish_due_scheduled_posts",
+        "schedule": crontab(minute="*"),
+    },
 }

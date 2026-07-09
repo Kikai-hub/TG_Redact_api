@@ -5,7 +5,7 @@
 <h3 class="mb-4">Посты</h3>
 <div class="btn-group mb-3">
   <a class="btn btn-sm btn-outline-secondary {{ 'active' if not status }}" href="/posts">Все</a>
-  {% for s in ["pending", "processed", "moderated", "published", "rejected", "error"] %}
+  {% for s in ["pending", "processed", "moderated", "scheduled", "published", "rejected", "error"] %}
   <a class="btn btn-sm btn-outline-secondary {{ 'active' if status == s }}" href="/posts?status={{ s }}">{{ s }}</a>
   {% endfor %}
 </div>
