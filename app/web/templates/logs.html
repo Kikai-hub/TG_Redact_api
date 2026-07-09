@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 {% block title %}Логи{% endblock %}
 {% block content %}
 <h3 class="mb-4">Журнал событий</h3>
@@ -31,7 +32,7 @@
     {% for entry in logs %}
     <tr>
       <td class="text-nowrap">{{ entry.timestamp.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-      <td><span class="badge text-bg-{{ {'error': 'danger', 'warning': 'warning', 'info': 'info', 'debug': 'secondary'}[entry.level] }}">{{ entry.level }}</span></td>
+      <td>{{ macros.level_badge(entry.level) }}</td>
       <td>{{ entry.module }}</td>
       <td>{{ entry.message }}</td>
     </tr>

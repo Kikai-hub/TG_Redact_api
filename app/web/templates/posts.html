@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 {% block title %}Посты{% endblock %}
 {% block content %}
 <h3 class="mb-4">Посты</h3>
@@ -17,7 +18,7 @@
       <td>{{ post.id }}</td>
       <td>{{ post.original_title }}</td>
       <td>{{ post.source_id }}</td>
-      <td><span class="badge text-bg-light border">{{ post.status }}</span></td>
+      <td>{{ macros.status_badge(post.status) }}</td>
       <td>{{ post.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
       <td><a href="/posts/{{ post.id }}">Открыть</a></td>
     </tr>

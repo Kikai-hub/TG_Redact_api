@@ -1,12 +1,175 @@
+:root {
+  --color-primary: #1e40af;
+  --color-primary-rgb: 30, 64, 175;
+  --color-primary-dark: #0f2870;
+  --color-accent: #d97706;
+  --color-background: #f8fafc;
+  --color-foreground: #1e293b;
+  --color-muted: #eef2f7;
+  --color-border: #dbeafe;
+  --color-navbar: #0f172a;
+
+  --font-sans: "Fira Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Fira Code", "SFMono-Regular", Consolas, monospace;
+
+  --bs-body-bg: var(--color-background);
+  --bs-body-color: var(--color-foreground);
+  --bs-body-font-family: var(--font-sans);
+  --bs-border-color: var(--color-border);
+  --bs-primary: var(--color-primary);
+  --bs-primary-rgb: var(--color-primary-rgb);
+  --bs-link-color: var(--color-primary);
+  --bs-link-color-rgb: var(--color-primary-rgb);
+  --bs-link-hover-color: var(--color-primary-dark);
+  --bs-border-radius: 0.6rem;
+  --bs-border-radius-sm: 0.45rem;
+  --bs-border-radius-lg: 0.85rem;
+}
+
 body {
-  background-color: #f5f6f8;
+  font-family: var(--font-sans);
+}
+
+code, pre, kbd, samp, .post-text, .font-mono {
+  font-family: var(--font-mono);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- nav --- */
+
+.navbar {
+  background-color: var(--color-navbar) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-brand {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.navbar .nav-link {
+  border-radius: var(--bs-border-radius-sm);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.navbar .nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.navbar .nav-link.active {
+  color: #fff !important;
+  background-color: var(--color-primary);
+}
+
+/* -------------------------------------------------------------- cards --- */
+
+.card {
+  border-color: var(--color-border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.card-header {
+  font-weight: 600;
+  background-color: var(--color-muted);
+  border-bottom-color: var(--color-border);
 }
 
 .stat-card {
-  border-radius: 0.75rem;
+  border: none;
+  border-radius: var(--bs-border-radius-lg);
 }
+
+.stat-card .card-body {
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-card .fs-2 {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- tables --- */
+
+.table {
+  --bs-table-hover-bg: var(--color-muted);
+}
+
+.table thead th {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom-width: 1px;
+}
+
+.table td, .table th {
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+/* ------------------------------------------------------------ badges --- */
+
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0.4em 0.65em;
+}
+
+/* ----------------------------------------------------------- buttons --- */
+
+.btn {
+  border-radius: var(--bs-border-radius-sm);
+  transition: filter 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.btn:hover {
+  filter: brightness(0.96);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-bg: var(--color-primary-dark);
+  --bs-btn-hover-border-color: var(--color-primary-dark);
+}
+
+/* ------------------------------------------------------ focus states --- */
+
+.btn:focus-visible,
+.nav-link:focus-visible,
+.form-control:focus,
+.form-select:focus,
+a:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.35);
+  outline: none;
+}
+
+/* -------------------------------------------------------------- misc --- */
+
+.stat-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.stat-card:hover { box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12); }
 
 pre.post-text {
   white-space: pre-wrap;
   word-break: break-word;
+  background-color: var(--color-muted);
+  border-radius: var(--bs-border-radius-sm);
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+  .stat-card:hover { transform: none; }
 }

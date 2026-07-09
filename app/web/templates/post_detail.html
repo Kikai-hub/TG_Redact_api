@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% import "macros.html" as macros %}
 {% block title %}Пост #{{ post.id }}{% endblock %}
 {% block content %}
 <a href="/posts" class="btn btn-sm btn-link px-0">&larr; К списку постов</a>
-<h3 class="mb-3">Пост #{{ post.id }} <span class="badge text-bg-light border">{{ post.status }}</span></h3>
+<h3 class="mb-3">Пост #{{ post.id }} {{ macros.status_badge(post.status) }}</h3>
 
 <div class="row g-3">
   <div class="col-md-6">
@@ -19,7 +20,10 @@
           {% set media_type = m.type if m is mapping else "photo" %}
           <a href="{{ media_url }}" target="_blank" rel="noopener" class="text-center text-decoration-none">
             {% if media_type == "video" %}
-            <div class="border rounded d-flex align-items-center justify-content-center bg-light" style="width:110px; height:110px;">🎥<br>видео</div>
+            <div class="border rounded d-flex flex-column align-items-center justify-content-center bg-light text-muted" style="width:110px; height:110px;">
+              <i class="bi bi-camera-video fs-4"></i>
+              <small>видео</small>
+            </div>
             {% else %}
             <img src="{{ media_url }}" style="width:110px; height:110px; object-fit:cover;" class="rounded border" alt="фото">
             {% endif %}
@@ -66,10 +70,10 @@
       {% if post.status == "moderated" %}
       <div class="card-footer d-flex gap-2">
         <form method="post" action="/posts/{{ post.id }}/approve">
-          <button class="btn btn-success btn-sm" type="submit">✅ Опубликовать</button>
+          <button class="btn btn-success btn-sm" type="submit"><i class="bi bi-check-lg me-1"></i>Опубликовать</button>
         </form>
         <form method="post" action="/posts/{{ post.id }}/reject">
-          <button class="btn btn-danger btn-sm" type="submit">❌ Отказаться</button>
+          <button class="btn btn-danger btn-sm" type="submit"><i class="bi bi-x-lg me-1"></i>Отказаться</button>
         </form>
       </div>
       {% endif %}

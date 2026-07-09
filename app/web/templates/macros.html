@@ -1,0 +1,21 @@
+{% macro status_badge(status) -%}
+{% set classes = {
+  "pending": "text-bg-secondary",
+  "processed": "text-bg-info",
+  "moderated": "text-bg-warning",
+  "published": "text-bg-success",
+  "rejected": "text-bg-danger",
+  "error": "text-bg-dark",
+} %}
+<span class="badge {{ classes.get(status, 'text-bg-light border') }}">{{ status }}</span>
+{%- endmacro %}
+
+{% macro level_badge(level) -%}
+{% set classes = {
+  "debug": "text-bg-secondary",
+  "info": "text-bg-info",
+  "warning": "text-bg-warning",
+  "error": "text-bg-danger",
+} %}
+<span class="badge {{ classes.get(level, 'text-bg-light border') }}">{{ level }}</span>
+{%- endmacro %}
