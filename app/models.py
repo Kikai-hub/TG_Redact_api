@@ -14,6 +14,7 @@ def utcnow() -> datetime:
 class SourceType(str, enum.Enum):
     rss = "rss"
     html = "html"
+    telegram = "telegram"
 
 
 class PostStatus(str, enum.Enum):
@@ -73,6 +74,8 @@ class Post(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_by: Mapped[str | None] = mapped_column(String(255), nullable=True)  # admin.username
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     source: Mapped["Source"] = relationship(back_populates="posts")
     media: Mapped[list["Media"]] = relationship(back_populates="post", cascade="all, delete-orphan")

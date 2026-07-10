@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.parsing",
         "app.tasks.ai_processing",
         "app.tasks.publishing",
+        "app.tasks.cleanup",
     ],
 )
 
@@ -37,5 +38,9 @@ celery_app.conf.beat_schedule = {
     "tick-publish-due-scheduled-posts": {
         "task": "app.tasks.publishing.publish_due_scheduled_posts",
         "schedule": crontab(minute="*"),
+    },
+    "tick-purge-old-rejected-posts": {
+        "task": "app.tasks.cleanup.purge_old_rejected_posts",
+        "schedule": crontab(hour=3, minute=30),
     },
 }

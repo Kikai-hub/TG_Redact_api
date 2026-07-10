@@ -209,8 +209,11 @@ def posts_list(request: Request, status: str | None = None, db: Session = Depend
     if status:
         query = query.filter(models.Post.status == status)
     posts = query.order_by(models.Post.id.desc()).limit(100).all()
+    moderated_count = db.query(models.Post).filter(models.Post.status == models.PostStatus.moderated.value).count()
     return templates.TemplateResponse(
-        request, "posts.html", {"admin": admin, "posts": posts, "status": status}
+        request,
+        "posts.html",
+        {"admin": admin, "posts": posts, "status": status, "moderated_count": moderated_count},
     )
 
 
@@ -257,8 +260,28 @@ def post_reject(post_id: int, request: Request, db: Session = Depends(get_db)):
     post = db.get(models.Post, post_id)
     if post and post.status == models.PostStatus.moderated.value:
         post.status = models.PostStatus.rejected.value
+        post.rejected_at = datetime.now(timezone.utc)
         db.commit()
     return RedirectResponse(f"/posts/{post_id}", status_code=303)
+
+
+@router.post("/posts/reject-all")
+def posts_reject_all(request: Request, db: Session = Depends(get_db)):
+    admin, redirect = _require_admin(request, db)
+    if redirect:
+        return redirect
+    posts = db.query(models.Post).filter(models.Post.status == models.PostStatus.moderated.value).all()
+    now = datetime.now(timezone.utc)
+    for post in posts:
+        post.status = models.PostStatus.rejected.value
+        post.rejected_at = now
+    db.commit()
+    if posts:
+        log(
+            db, "info", f"{len(posts)} post(s) bulk-rejected by {admin.username}", "moderation",
+            {"admin": admin.username, "count": len(posts)},
+        )
+    return RedirectResponse("/posts?status=moderated", status_code=303)
 
 
 @router.post("/posts/{post_id}/edit")
@@ -266,7 +289,6 @@ def post_edit(
     post_id: int,
     request: Request,
     title: str = Form(...),
-    intro: str = Form(""),
     body: str = Form(...),
     comment: str = Form(""),
     hashtags: str = Form(""),
@@ -279,7 +301,6 @@ def post_edit(
     if post:
         post.ai_processed_text = {
             "title": title,
-            "intro": intro,
             "body": body,
             "comment": comment,
             "hashtags": hashtags,

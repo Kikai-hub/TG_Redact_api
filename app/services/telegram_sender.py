@@ -27,13 +27,18 @@ def _build_media_group(items: list[dict], caption: str):
 
 
 async def send_moderation_message(
-    token: str, chat_id: int, text: str, reply_markup: InlineKeyboardMarkup, media: list | None = None
+    token: str, chat_id: int, text: str, reply_markup: InlineKeyboardMarkup | None = None, media: list | None = None
 ) -> list[int]:
     """Sends the post to a moderator: single photo/video with caption+buttons
     if there's one media item, the full album followed by a separate message
     carrying the moderation buttons if there are several (Telegram's API does
     not allow reply_markup on a media group), or just text if there's none.
     Returns all sent message IDs.
+
+    reply_markup may be None for a read-only preview (e.g. a scheduled post
+    opened from the "Отложка" list, where the moderation buttons don't apply
+    anymore) — in the album case, the follow-up buttons message is skipped
+    entirely rather than sent with no buttons on it.
 
     Opens a fresh Bot (and aiohttp session) per call rather than reusing a
     cached one: callers on the Celery side wrap this in a new asyncio.run()
@@ -53,8 +58,11 @@ async def send_moderation_message(
             return [message.message_id]
 
         album_messages = await bot.send_media_group(chat_id, _build_media_group(items, text))
-        keyboard_message = await bot.send_message(chat_id, "Действия по посту выше:", reply_markup=reply_markup)
-        return [m.message_id for m in album_messages] + [keyboard_message.message_id]
+        message_ids = [m.message_id for m in album_messages]
+        if reply_markup is not None:
+            keyboard_message = await bot.send_message(chat_id, "Действия по посту выше:", reply_markup=reply_markup)
+            message_ids.append(keyboard_message.message_id)
+        return message_ids
     finally:
         await bot.session.close()
 

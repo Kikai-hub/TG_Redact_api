@@ -1,10 +1,12 @@
 from app.services.parsers.base import BaseParser, RawItem
 from app.services.parsers.html import HtmlParser
 from app.services.parsers.rss import RssParser
+from app.services.parsers.telegram import TelegramParser
 
 PARSERS: dict[str, BaseParser] = {
     "rss": RssParser(),
     "html": HtmlParser(),
+    "telegram": TelegramParser(),
 }
 
 

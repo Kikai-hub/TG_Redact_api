@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
@@ -9,6 +10,17 @@ if TYPE_CHECKING:
 
 _PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
+
+_BACKGROUND_IMAGE_RE = re.compile(r"background-image\s*:\s*url\((['\"]?)(.*?)\1\)")
+
+
+def extract_background_image_url(style: str) -> str | None:
+    """Pulls the URL out of an inline `background-image: url(...)` style
+    declaration — how lazy-loaded galleries embed media instead of an
+    `<img src>` (e.g. every photo/video thumbnail on Telegram's t.me/s/
+    channel preview)."""
+    match = _BACKGROUND_IMAGE_RE.search(style)
+    return match.group(2) if match else None
 
 
 def guess_media_type(url: str, mime_type: str = "") -> str:

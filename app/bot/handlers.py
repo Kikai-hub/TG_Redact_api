@@ -4,10 +4,18 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from app import models
-from app.bot.keyboards import moderation_keyboard, publish_choice_keyboard
+from app.bot.keyboards import (
+    NEW_POSTS_BUTTON,
+    SCHEDULED_BUTTON,
+    main_menu_keyboard,
+    moderation_keyboard,
+    post_list_keyboard,
+    publish_choice_keyboard,
+    reject_all_confirm_keyboard,
+)
 from app.database import SessionLocal
 from app.services import settings_store
 from app.services.formatting import format_post_text
@@ -25,6 +33,9 @@ SCHEDULE_TIME_FORMAT_HINT = "ДД.ММ.ГГГГ ЧЧ:ММ"
 # Scheduling input/confirmation is shown in MSK; storage/comparison stays UTC.
 MODERATOR_TZ = timezone(timedelta(hours=3), name="MSK")
 
+NEW_POSTS_LIST_LIMIT = 10
+SHORT_LABEL_LENGTH = 28
+
 
 class ModerationStates(StatesGroup):
     waiting_for_edit = State()
@@ -39,10 +50,36 @@ def _get_admin(db, telegram_id: int) -> models.Admin | None:
     )
 
 
+def _post_title(post: models.Post) -> str:
+    return (post.ai_processed_text or {}).get("title") or post.original_title or "(без текста)"
+
+
+def _short_label(text: str, length: int = SHORT_LABEL_LENGTH) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= length else text[:length].rstrip() + "…"
+
+
+async def _open_post_card(message: Message, db, post: models.Post, keyboard: InlineKeyboardMarkup | None) -> None:
+    """Sends the post's full text + media as a fresh message — reused by the
+    "🆕 Новые"/"🕒 Отложка" list callbacks and by the edit flow. keyboard=None
+    renders a read-only preview (used for already-scheduled posts, where the
+    moderation actions no longer apply)."""
+    token = settings_store.get_secret_setting(db, "telegram_bot_token")
+    text = format_post_text(post.ai_processed_text)
+    if token:
+        await send_moderation_message(token, message.chat.id, text, keyboard, post.raw_media)
+    else:
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
     await message.answer(
-        "Привет! Я бот-модератор новостного агрегатора.\nИспользуй /help чтобы узнать список команд."
+        "Привет! Я бот-модератор новостного агрегатора.\n"
+        f"Новые посты на модерации смотри по кнопке «{NEW_POSTS_BUTTON}», "
+        f"запланированные — по кнопке «{SCHEDULED_BUTTON}» внизу экрана.\n"
+        "Используй /help чтобы узнать список команд.",
+        reply_markup=main_menu_keyboard(),
     )
 
 
@@ -53,13 +90,16 @@ async def cmd_help(message: Message) -> None:
         "/start — приветствие\n"
         "/help — эта справка\n"
         "/status — текущее состояние системы\n\n"
-        "Когда придёт новость на модерацию, используй кнопки под сообщением:\n"
+        f"«{NEW_POSTS_BUTTON}» — последние {NEW_POSTS_LIST_LIMIT} постов, ожидающих модерации\n"
+        f"«{SCHEDULED_BUTTON}» — посты, запланированные к публикации\n\n"
+        "Открыв пост из любого из этих списков, используй кнопки под сообщением:\n"
         "✏️ Доработать — прислать новый текст для поля body\n"
         "✅ Опубликовать — выбрать 'Сейчас' или 'По времени' (отложенная публикация)\n"
         "❌ Отказаться — отклонить пост\n\n"
         f"Для отложенной публикации присылай дату и время в формате {SCHEDULE_TIME_FORMAT_HINT} "
         "по московскому времени (МСК) — сервер стоит в Нидерландах и хранит всё в UTC, "
-        "но бот сам пересчитает."
+        "но бот сам пересчитает.\n\n"
+        "/reject_all — отклонить разом все посты, ожидающие модерации"
     )
 
 
@@ -84,6 +124,166 @@ async def cmd_status(message: Message) -> None:
             f"Отклонено: {counts['rejected']}\n"
             f"Ошибок обработки: {counts['error']}"
         )
+    finally:
+        db.close()
+
+
+@router.message(F.text == NEW_POSTS_BUTTON)
+async def cmd_new_posts(message: Message, state: FSMContext) -> None:
+    # Tapping a menu button always wins over any in-progress edit/schedule input
+    # (both are plain-text handlers gated on FSM state, registered further down) —
+    # clear it so a stray leftover state doesn't hijack the moderator's next message.
+    await state.clear()
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, message.from_user.id)
+        if admin is None:
+            await message.answer("Вы не зарегистрированы как модератор/администратор.")
+            return
+
+        posts = (
+            db.query(models.Post)
+            .filter(models.Post.status == models.PostStatus.moderated.value)
+            .order_by(models.Post.id.desc())
+            .limit(NEW_POSTS_LIST_LIMIT)
+            .all()
+        )
+        if not posts:
+            await message.answer("Новых постов на модерации нет.")
+            return
+
+        items = [(post.id, f"#{post.id} — {_short_label(_post_title(post))}") for post in posts]
+        await message.answer(
+            f"🆕 Новые посты на модерации ({len(posts)}):",
+            reply_markup=post_list_keyboard(items, "new:open"),
+        )
+    finally:
+        db.close()
+
+
+@router.message(F.text == SCHEDULED_BUTTON)
+async def cmd_scheduled_posts(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, message.from_user.id)
+        if admin is None:
+            await message.answer("Вы не зарегистрированы как модератор/администратор.")
+            return
+
+        posts = (
+            db.query(models.Post)
+            .filter(models.Post.status == models.PostStatus.scheduled.value)
+            .order_by(models.Post.scheduled_at.asc())
+            .all()
+        )
+        if not posts:
+            await message.answer("Отложенных постов нет.")
+            return
+
+        items = []
+        for post in posts:
+            when = post.scheduled_at.astimezone(MODERATOR_TZ).strftime("%d.%m %H:%M") if post.scheduled_at else "?"
+            by = post.scheduled_by or "—"
+            label = f"#{post.id} {_short_label(_post_title(post))} · {when} МСК · @{by}"
+            items.append((post.id, label))
+
+        await message.answer(
+            f"🕒 Отложенные посты ({len(posts)}):",
+            reply_markup=post_list_keyboard(items, "sched:open"),
+        )
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("new:open:"))
+async def handle_open_new_post(callback: CallbackQuery) -> None:
+    post_id = int(callback.data.rsplit(":", 1)[1])
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, callback.from_user.id)
+        if admin is None:
+            await callback.answer("Вы не зарегистрированы как модератор/администратор.", show_alert=True)
+            return
+        post = db.get(models.Post, post_id)
+        if post is None or post.status != models.PostStatus.moderated.value:
+            await callback.answer("Пост уже обработан.", show_alert=True)
+            return
+        await _open_post_card(callback.message, db, post, moderation_keyboard(post.id))
+        await callback.answer()
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("sched:open:"))
+async def handle_open_scheduled_post(callback: CallbackQuery) -> None:
+    post_id = int(callback.data.rsplit(":", 1)[1])
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, callback.from_user.id)
+        if admin is None:
+            await callback.answer("Вы не зарегистрированы как модератор/администратор.", show_alert=True)
+            return
+        post = db.get(models.Post, post_id)
+        if post is None or post.status != models.PostStatus.scheduled.value:
+            await callback.answer("Пост уже обработан.", show_alert=True)
+            return
+        await _open_post_card(callback.message, db, post, None)
+        await callback.answer()
+    finally:
+        db.close()
+
+
+@router.message(Command("reject_all"))
+async def cmd_reject_all(message: Message) -> None:
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, message.from_user.id)
+        if admin is None or admin.role not in ("moderator", "admin"):
+            await message.answer("Недостаточно прав.")
+            return
+
+        count = db.query(models.Post).filter(models.Post.status == models.PostStatus.moderated.value).count()
+        if count == 0:
+            await message.answer("На модерации нет постов.")
+            return
+
+        await message.answer(
+            f"На модерации {count} пост(ов). Точно отклонить все разом?",
+            reply_markup=reject_all_confirm_keyboard(),
+        )
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("modall:"))
+async def handle_reject_all_callback(callback: CallbackQuery) -> None:
+    action = callback.data.split(":", 1)[1]
+    if action == "cancel":
+        await callback.message.edit_text("Отменено.")
+        await callback.answer()
+        return
+
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, callback.from_user.id)
+        if admin is None or admin.role not in ("moderator", "admin"):
+            await callback.answer("Недостаточно прав", show_alert=True)
+            return
+
+        posts = db.query(models.Post).filter(models.Post.status == models.PostStatus.moderated.value).all()
+        count = len(posts)
+        now = datetime.now(timezone.utc)
+        for post in posts:
+            post.status = models.PostStatus.rejected.value
+            post.rejected_at = now
+        db.commit()
+        log(
+            db, "info", f"{count} post(s) bulk-rejected by {admin.username}", "moderation",
+            {"admin": admin.username, "count": count},
+        )
+        await callback.message.edit_text(f"❌ Отклонено постов: {count}.")
+        await callback.answer()
     finally:
         db.close()
 
@@ -138,6 +338,7 @@ async def handle_moderation_callback(callback: CallbackQuery, state: FSMContext)
 
         elif action == "reject":
             post.status = models.PostStatus.rejected.value
+            post.rejected_at = datetime.now(timezone.utc)
             db.commit()
             await callback.message.edit_reply_markup(reply_markup=None)
             await callback.message.answer(f"❌ Пост #{post.id} отклонён.")
@@ -180,15 +381,7 @@ async def handle_edit_text(message: Message, state: FSMContext) -> None:
         log(db, "info", f"Post {post.id} edited by {admin.username}", "moderation", {"post_id": post.id})
 
         await message.answer("Обновлённый пост:")
-        token = settings_store.get_secret_setting(db, "telegram_bot_token")
-        if token:
-            await send_moderation_message(
-                token, message.chat.id, format_post_text(ai_data), moderation_keyboard(post.id), post.raw_media
-            )
-        else:
-            await message.answer(
-                format_post_text(ai_data), reply_markup=moderation_keyboard(post.id), parse_mode="HTML"
-            )
+        await _open_post_card(message, db, post, moderation_keyboard(post.id))
     finally:
         db.close()
 
@@ -230,6 +423,7 @@ async def handle_schedule_time(message: Message, state: FSMContext) -> None:
 
         post.status = models.PostStatus.scheduled.value
         post.scheduled_at = scheduled_at
+        post.scheduled_by = admin.username
         db.commit()
         log(
             db, "info", f"Post {post.id} scheduled for {scheduled_at.isoformat()} by {admin.username}",

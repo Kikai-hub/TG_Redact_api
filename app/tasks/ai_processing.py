@@ -1,12 +1,8 @@
-import asyncio
-
 from app import models
 from app.database import SessionLocal
 from app.services import settings_store
 from app.services.ai_client import AIProcessingError, process_with_ai
-from app.services.formatting import format_post_text
 from app.services.logging_service import log
-from app.services.telegram_sender import send_moderation_message
 from app.tasks.celery_app import celery_app
 
 
@@ -64,46 +60,7 @@ def process_single_post(self, post_id: int) -> None:
         post.status = models.PostStatus.moderated.value
         db.commit()
         log(db, "info", f"AI processed post {post.id}", "ai_processing", {"post_id": post.id})
-
-        notify_moderators(db, post)
+        # No push notification here by design: moderators pull the queue via the
+        # bot's "🆕 Новые" button instead of getting a card per post in their chat.
     finally:
         db.close()
-
-
-def notify_moderators(db, post: models.Post) -> None:
-    from app.bot.keyboards import moderation_keyboard
-
-    token = settings_store.get_secret_setting(db, "telegram_bot_token")
-    if not token:
-        log(
-            db, "error", "Telegram bot token is not configured (Settings); post left unmoderated",
-            "ai_processing", {"post_id": post.id},
-        )
-        return
-
-    moderators = (
-        db.query(models.Admin)
-        .filter(
-            models.Admin.active.is_(True),
-            models.Admin.role.in_(["moderator", "admin"]),
-            models.Admin.telegram_id.isnot(None),
-        )
-        .all()
-    )
-    if not moderators:
-        log(
-            db, "warning", "No active moderators with telegram_id configured; post left unmoderated",
-            "ai_processing", {"post_id": post.id},
-        )
-        return
-
-    text = format_post_text(post.ai_processed_text)
-    keyboard = moderation_keyboard(post.id)
-    for moderator in moderators:
-        try:
-            asyncio.run(send_moderation_message(token, moderator.telegram_id, text, keyboard, post.raw_media))
-        except Exception as exc:
-            log(
-                db, "error", f"Failed to notify moderator {moderator.telegram_id} about post {post.id}: {exc}",
-                "ai_processing", {"post_id": post.id},
-            )

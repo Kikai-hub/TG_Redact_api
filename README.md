@@ -123,6 +123,12 @@ python -m app.bot.main
     "media_attr": "src"
   }
   ```
+- **Telegram-паблик**: тип `telegram`, `url` — имя канала (`breakingmash`, `@breakingmash` или
+  `https://t.me/breakingmash`), `config` не используется. Парсер сам обходит публичную
+  веб-версию канала (`t.me/s/<channel>`) и достаёт фото/видео из постов — их разметка
+  (`background-image` на `<a>`/`<i>`, plain `<video src>`) отличается от обычных сайтов, поэтому
+  для Telegram не пытайтесь заводить источник как `html` с `"media_selector": "img"` — там нет
+  `<img>`-тегов, и фото просто не подхватятся.
 - `filters` (опционально): `{"keywords": [...], "stop_words": [...], "min_length": 100}`.
 
 ## Пайплайн

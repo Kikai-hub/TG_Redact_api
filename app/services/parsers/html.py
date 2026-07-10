@@ -1,18 +1,21 @@
-import re
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-from app.services.parsers.base import BaseParser, MediaItem, RawItem, guess_media_type
+from app.services.parsers.base import (
+    BaseParser,
+    MediaItem,
+    RawItem,
+    extract_background_image_url,
+    guess_media_type,
+)
 
 if TYPE_CHECKING:
     from app.models import Source
 
 USER_AGENT = "Mozilla/5.0 (compatible; NewsAggregatorBot/1.0)"
-
-_BACKGROUND_IMAGE_RE = re.compile(r"background-image\s*:\s*url\((['\"]?)(.*?)\1\)")
 
 
 class HtmlParser(BaseParser):
@@ -62,7 +65,9 @@ class HtmlParser(BaseParser):
             media: list[MediaItem] = []
             if media_selector:
                 for media_node in node.select(media_selector):
-                    src = media_node.get(media_attr) or _extract_background_image(media_node)
+                    src = media_node.get(media_attr) or extract_background_image_url(
+                        media_node.get("style") or ""
+                    )
                     if src:
                         media_url = urljoin(base_url, src)
                         media.append(MediaItem(url=media_url, type=guess_media_type(media_url)))
@@ -84,11 +89,3 @@ def _select_attr(node: Tag, selector: str | None, attr: str) -> str | None:
     if target is None:
         return None
     return target.get(attr)
-
-
-def _extract_background_image(node: Tag) -> str | None:
-    style = node.get("style")
-    if not style:
-        return None
-    match = _BACKGROUND_IMAGE_RE.search(style)
-    return match.group(2) if match else None

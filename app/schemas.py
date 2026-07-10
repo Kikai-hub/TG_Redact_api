@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class SourceBase(BaseModel):
     name: str
-    type: str  # rss | html
+    type: str  # rss | html | telegram
     url: str
     config: dict = {}
     filters: dict = {}
@@ -58,6 +58,8 @@ class PostOut(BaseModel):
     created_at: datetime
     published_at: datetime | None
     scheduled_at: datetime | None
+    scheduled_by: str | None
+    rejected_at: datetime | None
     media: list[MediaOut] = []
 
 

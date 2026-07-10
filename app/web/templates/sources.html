@@ -15,6 +15,7 @@
         <select class="form-select" name="type">
           <option value="rss">RSS / Atom / Blog</option>
           <option value="html">HTML (CSS-селекторы)</option>
+          <option value="telegram">Telegram-канал (паблик)</option>
         </select>
       </div>
       <div class="col-md-3">
@@ -33,6 +34,9 @@
     <small class="text-muted">
       Для HTML-источников обязателен <code>item_selector</code> в config; см. также
       <code>title_selector</code>, <code>text_selector</code>, <code>url_selector</code>, <code>media_selector</code>.
+      Для Telegram-источников config не нужен — в URL укажите имя канала (<code>breakingmash</code>,
+      <code>@breakingmash</code> или <code>https://t.me/breakingmash</code>); фото и видео из постов
+      подхватываются автоматически.
     </small>
   </div>
 </div>

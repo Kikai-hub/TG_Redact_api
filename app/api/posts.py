@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -51,6 +53,7 @@ def reject_post(
     if post is None or post.status != models.PostStatus.moderated.value:
         raise HTTPException(status_code=400, detail="Post is not awaiting moderation")
     post.status = models.PostStatus.rejected.value
+    post.rejected_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
 

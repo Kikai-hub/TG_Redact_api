@@ -9,7 +9,7 @@ import json
 
 import httpx
 
-REQUIRED_FIELDS = ("title", "intro", "body", "comment", "hashtags")
+REQUIRED_FIELDS = ("title", "body", "comment", "hashtags")
 
 
 class AIProcessingError(Exception):

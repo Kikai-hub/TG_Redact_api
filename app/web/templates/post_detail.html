@@ -8,7 +8,7 @@
 <p class="text-muted">
   <i class="bi bi-clock"></i>
   Запланирован на {{ (post.scheduled_at | to_msk).strftime("%Y-%m-%d %H:%M") }} МСК
-  ({{ post.scheduled_at.strftime("%Y-%m-%d %H:%M") }} UTC)
+  ({{ post.scheduled_at.strftime("%Y-%m-%d %H:%M") }} UTC){% if post.scheduled_by %} модератором {{ post.scheduled_by }}{% endif %}
 </p>
 {% endif %}
 
@@ -51,10 +51,6 @@
           <div class="mb-2">
             <label class="form-label">title</label>
             <input class="form-control" name="title" value="{{ post.ai_processed_text.title }}">
-          </div>
-          <div class="mb-2">
-            <label class="form-label">intro</label>
-            <textarea class="form-control" name="intro" rows="2">{{ post.ai_processed_text.intro }}</textarea>
           </div>
           <div class="mb-2">
             <label class="form-label">body</label>
