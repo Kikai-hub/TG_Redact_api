@@ -7,6 +7,8 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, InputMediaPhoto, InputMediaVideo
 
+from app.services.formatting import format_post_text
+
 MEDIA_FETCH_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; NewsAggregatorBot/1.0)"}
 MEDIA_FETCH_TIMEOUT = 20
 MEDIA_MAX_BYTES = 45 * 1024 * 1024  # stay under Telegram's ~50MB bot upload ceiling
@@ -189,11 +191,10 @@ async def _resolve_mood_emoji_html(bot: Bot, emoji_pack_name: str | None, mood_e
 async def send_moderation_message(
     token: str,
     chat_id: int,
-    text: str,
+    ai_data: dict,
     reply_markup: InlineKeyboardMarkup | None = None,
     media: list | None = None,
     emoji_pack_name: str | None = None,
-    mood_emoji: str | None = None,
 ) -> tuple[list[int], list[dict]]:
     """Sends the post to a moderator: single photo/video with caption+buttons
     if there's one media item, the full album followed by a separate message
@@ -206,9 +207,10 @@ async def send_moderation_message(
     anymore) — in the album case, the follow-up buttons message is skipped
     entirely rather than sent with no buttons on it.
 
-    If emoji_pack_name/mood_emoji are given, a matching custom emoji (see
-    _resolve_mood_emoji_html) is appended into the post text itself so the
-    moderator sees exactly what will go out on publish.
+    Takes the raw AI JSON (ai_data) rather than a pre-built string — the
+    matching custom emoji (see _resolve_mood_emoji_html, needs a live Bot to
+    look up) has to be resolved before format_post_text builds the final
+    text, since it's rendered onto the comment line, not appended after.
 
     Opens a fresh Bot (and aiohttp session) per call rather than reusing a
     cached one: callers on the Celery side wrap this in a new asyncio.run()
@@ -217,9 +219,8 @@ async def send_moderation_message(
     items = _normalize_media(media)
     bot = Bot(token=token)
     try:
-        mood_html = await _resolve_mood_emoji_html(bot, emoji_pack_name, mood_emoji)
-        if mood_html:
-            text = f"{text}\n{mood_html}"
+        mood_html = await _resolve_mood_emoji_html(bot, emoji_pack_name, ai_data.get("mood_emoji"))
+        text = format_post_text(ai_data, mood_html)
         return await _send_post(bot, chat_id, text, items, reply_markup)
     finally:
         await bot.session.close()
@@ -228,19 +229,17 @@ async def send_moderation_message(
 async def publish_to_channel(
     token: str,
     chat_id: str,
-    text: str,
+    ai_data: dict,
     media: list | None = None,
     emoji_pack_name: str | None = None,
-    mood_emoji: str | None = None,
 ) -> list[dict]:
     """Returns the list of media items Telegram rejected (see _send_post) —
     empty if the post published with all its media intact."""
     items = _normalize_media(media)
     bot = Bot(token=token)
     try:
-        mood_html = await _resolve_mood_emoji_html(bot, emoji_pack_name, mood_emoji)
-        if mood_html:
-            text = f"{text}\n{mood_html}"
+        mood_html = await _resolve_mood_emoji_html(bot, emoji_pack_name, ai_data.get("mood_emoji"))
+        text = format_post_text(ai_data, mood_html)
         _message_ids, dropped = await _send_post(bot, chat_id, text, items, reply_markup=None)
         return dropped
     finally:

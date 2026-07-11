@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from app import models
 from app.database import SessionLocal
 from app.services import settings_store
-from app.services.formatting import format_post_text
 from app.services.logging_service import log
 from app.services.telegram_sender import publish_to_channel
 from app.tasks.celery_app import celery_app
@@ -32,11 +31,10 @@ def publish_post(self, post_id: int) -> None:
             return
 
         emoji_pack_name = settings_store.get_setting(db, "emoji_pack_name")
-        mood_emoji = (post.ai_processed_text or {}).get("mood_emoji")
-        text = format_post_text(post.ai_processed_text)
+        ai_data = post.ai_processed_text or {}
         try:
             dropped = asyncio.run(
-                publish_to_channel(token, channel_id, text, post.raw_media, emoji_pack_name, mood_emoji)
+                publish_to_channel(token, channel_id, ai_data, post.raw_media, emoji_pack_name)
             )
         except Exception as exc:
             log(db, "error", f"Failed to publish post {post.id}: {exc}", "publishing", {"post_id": post.id})
