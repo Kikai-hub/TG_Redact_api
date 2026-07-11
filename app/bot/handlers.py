@@ -10,7 +10,9 @@ from app import models
 from app.bot.keyboards import (
     NEW_POSTS_BUTTON,
     SCHEDULED_BUTTON,
+    edit_choice_keyboard,
     main_menu_keyboard,
+    media_edit_keyboard,
     moderation_keyboard,
     post_list_keyboard,
     publish_choice_keyboard,
@@ -36,9 +38,16 @@ MODERATOR_TZ = timezone(timedelta(hours=3), name="MSK")
 NEW_POSTS_LIST_LIMIT = 10
 SHORT_LABEL_LENGTH = 28
 
+# Telegram's hard limit on how many items a media group (album) can carry —
+# also used here as the cap on how many files a moderator can attach to one post.
+MAX_MEDIA_PER_POST = 10
+
+_MEDIA_KIND_RU = {"photo": "фото", "video": "видео"}
+
 
 class ModerationStates(StatesGroup):
     waiting_for_edit = State()
+    waiting_for_media = State()
     waiting_for_schedule_time = State()
 
 
@@ -57,6 +66,24 @@ def _post_title(post: models.Post) -> str:
 def _short_label(text: str, length: int = SHORT_LABEL_LENGTH) -> str:
     text = " ".join(text.split())
     return text if len(text) <= length else text[:length].rstrip() + "…"
+
+
+def _media_edit_prompt_text(post: models.Post) -> str:
+    media = post.raw_media or []
+    if media:
+        lines = [f"Текущие медиафайлы поста #{post.id} ({len(media)} шт.):"]
+        lines += [
+            f"{i + 1}. {_MEDIA_KIND_RU.get(item.get('type', 'photo'), 'файл')}" for i, item in enumerate(media)
+        ]
+    else:
+        lines = [f"У поста #{post.id} пока нет медиафайлов."]
+    lines += [
+        "",
+        "Пришлите новое фото или видео, чтобы добавить его к посту.",
+        "Чтобы удалить текущий файл — нажмите кнопку с его номером ниже.",
+        "Когда закончите — нажмите «✅ Готово».",
+    ]
+    return "\n".join(lines)
 
 
 async def _open_post_card(message: Message, db, post: models.Post, keyboard: InlineKeyboardMarkup | None) -> None:
@@ -93,7 +120,9 @@ async def cmd_help(message: Message) -> None:
         f"«{NEW_POSTS_BUTTON}» — последние {NEW_POSTS_LIST_LIMIT} постов, ожидающих модерации\n"
         f"«{SCHEDULED_BUTTON}» — посты, запланированные к публикации\n\n"
         "Открыв пост из любого из этих списков, используй кнопки под сообщением:\n"
-        "✏️ Доработать — прислать новый текст для поля body\n"
+        "✏️ Доработать — выбрать «Текст» (новый текст для поля body) или «Фото/Видео» "
+        "(добавить новые файлы или удалить текущие — например, если фото из Telegram-канала "
+        "не загрузилось)\n"
         "✅ Опубликовать — выбрать 'Сейчас' или 'По времени' (отложенная публикация)\n"
         "❌ Отказаться — отклонить пост\n\n"
         f"Для отложенной публикации присылай дату и время в формате {SCHEDULE_TIME_FORMAT_HINT} "
@@ -349,9 +378,22 @@ async def handle_moderation_callback(callback: CallbackQuery, state: FSMContext)
             await callback.answer()
 
         elif action == "edit":
+            await callback.message.edit_reply_markup(reply_markup=edit_choice_keyboard(post.id))
+            await callback.answer()
+
+        elif action == "edit_text":
             await state.update_data(editing_post_id=post.id)
             await state.set_state(ModerationStates.waiting_for_edit)
             await callback.message.answer(f"Пришлите новый текст для поста #{post.id} (заменит поле 'body').")
+            await callback.answer()
+
+        elif action == "edit_media":
+            await state.update_data(editing_post_id=post.id)
+            await state.set_state(ModerationStates.waiting_for_media)
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.message.answer(
+                _media_edit_prompt_text(post), reply_markup=media_edit_keyboard(post.id, post.raw_media)
+            )
             await callback.answer()
         else:
             await callback.answer()
@@ -382,6 +424,104 @@ async def handle_edit_text(message: Message, state: FSMContext) -> None:
 
         await message.answer("Обновлённый пост:")
         await _open_post_card(message, db, post, moderation_keyboard(post.id))
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("medit:"))
+async def handle_media_edit_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    _, action, post_id_str, *rest = callback.data.split(":")
+    post_id = int(post_id_str)
+
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, callback.from_user.id)
+        if admin is None or admin.role not in ("moderator", "admin"):
+            await callback.answer("Недостаточно прав", show_alert=True)
+            return
+
+        post = db.get(models.Post, post_id)
+        if post is None or post.status != models.PostStatus.moderated.value:
+            await callback.answer("Пост уже обработан", show_alert=True)
+            return
+
+        if action == "del":
+            index = int(rest[0])
+            media = list(post.raw_media or [])
+            if not (0 <= index < len(media)):
+                await callback.answer("Этот файл уже удалён.", show_alert=True)
+                return
+            removed = media.pop(index)
+            post.raw_media = media
+            db.commit()
+            log(
+                db, "info", f"Media removed from post {post.id} by {admin.username}", "moderation",
+                {"post_id": post.id, "admin": admin.username, "type": removed.get("type")},
+            )
+            await callback.message.edit_text(
+                _media_edit_prompt_text(post), reply_markup=media_edit_keyboard(post.id, post.raw_media)
+            )
+            await callback.answer()
+
+        elif action == "done":
+            await state.clear()
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.message.answer("Медиафайлы обновлены. Обновлённый пост:")
+            await _open_post_card(callback.message, db, post, moderation_keyboard(post.id))
+            await callback.answer()
+        else:
+            await callback.answer()
+    finally:
+        db.close()
+
+
+@router.message(ModerationStates.waiting_for_media)
+async def handle_edit_media(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    post_id = data.get("editing_post_id")
+
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, message.from_user.id)
+        post = db.get(models.Post, post_id) if post_id else None
+        if admin is None or post is None:
+            await state.clear()
+            await message.answer("Не удалось применить правку — пост или права не найдены.")
+            return
+        if post.status != models.PostStatus.moderated.value:
+            await state.clear()
+            await message.answer("Пост уже обработан другим модератором.")
+            return
+
+        if message.photo:
+            file_id, media_type = message.photo[-1].file_id, "photo"
+        elif message.video:
+            file_id, media_type = message.video.file_id, "video"
+        else:
+            await message.answer(
+                "Пришлите фото или видео, либо нажмите «✅ Готово» под сообщением со списком медиафайлов."
+            )
+            return
+
+        media = list(post.raw_media or [])
+        if len(media) >= MAX_MEDIA_PER_POST:
+            await message.answer(
+                f"Достигнут лимит {MAX_MEDIA_PER_POST} медиафайлов на пост (ограничение Telegram для альбомов). "
+                "Удалите лишние кнопками выше, прежде чем добавлять новые."
+            )
+            return
+
+        media.append({"url": file_id, "type": media_type})
+        post.raw_media = media
+        db.commit()
+        log(
+            db, "info", f"Media added to post {post.id} by {admin.username}", "moderation",
+            {"post_id": post.id, "admin": admin.username, "type": media_type},
+        )
+
+        await message.answer(
+            _media_edit_prompt_text(post), reply_markup=media_edit_keyboard(post.id, post.raw_media)
+        )
     finally:
         db.close()
 

@@ -6,7 +6,7 @@ from aiogram.types import (
 )
 
 # callback_data format: "mod:<action>:<post_id>" — action in
-# {approve, reject, edit, publish_now, schedule, back}
+# {approve, reject, edit, edit_text, edit_media, publish_now, schedule, back}
 CALLBACK_PREFIX = "mod"
 
 
@@ -32,6 +32,48 @@ def publish_choice_keyboard(post_id: int) -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def edit_choice_keyboard(post_id: int) -> InlineKeyboardMarkup:
+    """Shown after "✏️ Доработать" — moderator picks whether to replace the
+    text or to add/remove media files before publishing."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📝 Текст", callback_data=f"{CALLBACK_PREFIX}:edit_text:{post_id}"),
+                InlineKeyboardButton(text="🖼 Фото/Видео", callback_data=f"{CALLBACK_PREFIX}:edit_media:{post_id}"),
+            ],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{CALLBACK_PREFIX}:back:{post_id}")],
+        ]
+    )
+
+
+# callback_data format: "medit:<action>:<post_id>[:<index>]" — action in
+# {del, done}; <index> is the position of the item in post.raw_media, only
+# present for "del".
+MEDIA_EDIT_CALLBACK_PREFIX = "medit"
+
+_MEDIA_KIND_RU = {"photo": "фото", "video": "видео"}
+
+
+def media_edit_keyboard(post_id: int, media: list[dict] | None) -> InlineKeyboardMarkup:
+    """One "delete" button per current media item (so the moderator can drop
+    scraped media that failed to load) plus a "done" button to close the
+    session — sending photos/videos while this keyboard is showing appends
+    them instead, handled by the FSM message handler."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"🗑 Удалить {_MEDIA_KIND_RU.get(item.get('type', 'photo'), 'файл')} {i + 1}",
+                callback_data=f"{MEDIA_EDIT_CALLBACK_PREFIX}:del:{post_id}:{i}",
+            )
+        ]
+        for i, item in enumerate(media or [])
+    ]
+    rows.append(
+        [InlineKeyboardButton(text="✅ Готово", callback_data=f"{MEDIA_EDIT_CALLBACK_PREFIX}:done:{post_id}")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # callback_data format: "modall:<action>" — action in {confirm, cancel}
