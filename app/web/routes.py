@@ -411,6 +411,7 @@ def settings_save(
     telegram_bot_token: str = Form(""),
     telegram_bot_token_clear: bool = Form(False),
     target_channel_id: str = Form(""),
+    emoji_pack_name: str = Form(""),
     parse_interval_minutes: int = Form(...),
     dedup_window_days: int = Form(...),
     max_posts_per_cycle: int = Form(...),
@@ -442,6 +443,7 @@ def settings_save(
     settings_store.set_setting(db, "ai_temperature", ai_temperature)
     settings_store.set_setting(db, "ai_max_tokens", ai_max_tokens)
     settings_store.set_setting(db, "target_channel_id", target_channel_id)
+    settings_store.set_setting(db, "emoji_pack_name", emoji_pack_name)
     settings_store.set_setting(db, "parse_interval_minutes", parse_interval_minutes)
     settings_store.set_setting(db, "dedup_window_days", dedup_window_days)
     settings_store.set_setting(db, "max_posts_per_cycle", max_posts_per_cycle)

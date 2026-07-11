@@ -18,6 +18,7 @@ DEFAULT_EXAMPLE_FORMAT = {
     "body": "Основная часть с лёгкой иронией — СТРОГО до 300 символов, только суть, без вступлений и воды",
     "comment": "Короткая ироничная подпись или забавный факт, до 100 символов (опционально)",
     "hashtags": "Ровно 3-4 хэштега через пробел, например: #новости #происшествия #россия",
+    "mood_emoji": "Один эмодзи, отражающий настроение комментария — 😂 😱 🔥 😢 🤔 и т.п. (опционально)",
 }
 
 DEFAULTS: dict[str, object] = {
@@ -27,6 +28,12 @@ DEFAULTS: dict[str, object] = {
     "ai_temperature": 0.9,
     "ai_max_tokens": 800,
     "target_channel_id": "",
+    # Short name of a Telegram custom emoji pack (the part after
+    # t.me/addemoji/) — empty disables the feature. When set, the bot looks
+    # up a custom emoji from this pack matching the AI's "mood_emoji" and
+    # embeds it into the post text via the <tg-emoji> HTML tag (see
+    # app/services/telegram_sender.py).
+    "emoji_pack_name": "",
     "parse_interval_minutes": 45,
     "dedup_window_days": 7,
     "max_posts_per_cycle": 50,

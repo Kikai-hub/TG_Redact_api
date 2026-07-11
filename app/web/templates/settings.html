@@ -80,6 +80,15 @@
         <label class="form-label">Target channel chat_id</label>
         <input class="form-control" name="target_channel_id" value="{{ values.target_channel_id }}">
       </div>
+      <div class="col-md-6">
+        <label class="form-label">Пак кастомных эмодзи (короткое имя)</label>
+        <input class="form-control" name="emoji_pack_name" value="{{ values.emoji_pack_name }}" placeholder="например, wbwrr_emoji">
+        <small class="text-muted d-block mt-1">
+          Короткое имя пака из ссылки <code>t.me/addemoji/&lt;имя&gt;</code>. Бот подбирает из него
+          кастомную эмодзи, чей эмодзи-тег совпадает с полем <code>mood_emoji</code> в ответе AI (см.
+          «Пример формата» выше), и вставляет её прямо в текст поста. Пусто — эмодзи выключены.
+        </small>
+      </div>
     </div>
   </div>
 

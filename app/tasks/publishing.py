@@ -31,9 +31,13 @@ def publish_post(self, post_id: int) -> None:
             log(db, "error", "Telegram bot token is not configured (Settings); cannot publish", "publishing", {"post_id": post.id})
             return
 
+        emoji_pack_name = settings_store.get_setting(db, "emoji_pack_name")
+        mood_emoji = (post.ai_processed_text or {}).get("mood_emoji")
         text = format_post_text(post.ai_processed_text)
         try:
-            asyncio.run(publish_to_channel(token, channel_id, text, post.raw_media))
+            dropped = asyncio.run(
+                publish_to_channel(token, channel_id, text, post.raw_media, emoji_pack_name, mood_emoji)
+            )
         except Exception as exc:
             log(db, "error", f"Failed to publish post {post.id}: {exc}", "publishing", {"post_id": post.id})
             raise self.retry(exc=exc, countdown=15)
@@ -41,6 +45,12 @@ def publish_post(self, post_id: int) -> None:
         post.status = models.PostStatus.published.value
         post.published_at = datetime.now(timezone.utc)
         db.commit()
+        if dropped:
+            log(
+                db, "warning",
+                f"Post {post.id} published with {len(dropped)} media item(s) dropped — Telegram rejected them",
+                "publishing", {"post_id": post.id, "dropped": dropped},
+            )
         log(db, "info", f"Published post {post.id}", "publishing", {"post_id": post.id})
     finally:
         db.close()

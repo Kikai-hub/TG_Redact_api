@@ -94,7 +94,18 @@ async def _open_post_card(message: Message, db, post: models.Post, keyboard: Inl
     token = settings_store.get_secret_setting(db, "telegram_bot_token")
     text = format_post_text(post.ai_processed_text)
     if token:
-        await send_moderation_message(token, message.chat.id, text, keyboard, post.raw_media)
+        emoji_pack_name = settings_store.get_setting(db, "emoji_pack_name")
+        mood_emoji = (post.ai_processed_text or {}).get("mood_emoji")
+        _message_ids, dropped = await send_moderation_message(
+            token, message.chat.id, text, keyboard, post.raw_media,
+            emoji_pack_name=emoji_pack_name, mood_emoji=mood_emoji,
+        )
+        if dropped:
+            log(
+                db, "warning",
+                f"Post {post.id}: Telegram rejected {len(dropped)} media item(s), showing without them",
+                "moderation", {"post_id": post.id, "dropped": dropped},
+            )
     else:
         await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
