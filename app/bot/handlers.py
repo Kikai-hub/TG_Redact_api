@@ -37,6 +37,10 @@ MODERATOR_TZ = timezone(timedelta(hours=3), name="MSK")
 
 NEW_POSTS_LIST_LIMIT = 10
 SHORT_LABEL_LENGTH = 28
+# Inline buttons get truncated on narrow phone screens, so the "Отложка" list
+# leads with date/time/author (the part moderators actually need to see at a
+# glance) and keeps the title short — if anything gets cut off, it's the title.
+SCHEDULED_LABEL_TITLE_LENGTH = 18
 
 # Telegram's hard limit on how many items a media group (album) can carry —
 # also used here as the cap on how many files a moderator can attach to one post.
@@ -223,7 +227,8 @@ async def cmd_scheduled_posts(message: Message, state: FSMContext) -> None:
         for post in posts:
             when = post.scheduled_at.astimezone(MODERATOR_TZ).strftime("%d.%m %H:%M") if post.scheduled_at else "?"
             by = post.scheduled_by or "—"
-            label = f"#{post.id} {_short_label(_post_title(post))} · {when} МСК · @{by}"
+            title = _short_label(_post_title(post), SCHEDULED_LABEL_TITLE_LENGTH)
+            label = f"{when} МСК · @{by} · #{post.id} {title}"
             items.append((post.id, label))
 
         await message.answer(

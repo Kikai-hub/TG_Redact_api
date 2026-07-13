@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 import random
 from html import escape
@@ -28,12 +29,18 @@ def _normalize_media(media: list | None) -> list[dict]:
 
 
 def _build_media_group(items: list[dict], caption: str):
-    # Telegram only shows the caption on the first item of an album.
+    # Telegram only shows the caption on the first item of an album. Each item's
+    # "file" key (set by _redownload_for_album), when present, takes priority over
+    # its "url" — that's how a re-uploaded item is threaded back into the album.
     group = []
     for i, item in enumerate(items):
         cls = InputMediaVideo if item["type"] == "video" else InputMediaPhoto
         group.append(
-            cls(media=item["url"], caption=caption if i == 0 else None, parse_mode="HTML" if i == 0 else None)
+            cls(
+                media=item.get("file", item["url"]),
+                caption=caption if i == 0 else None,
+                parse_mode="HTML" if i == 0 else None,
+            )
         )
     return group
 
@@ -94,21 +101,51 @@ async def _send_one(send, chat_id: int, item: dict, caption: str | None, reply_m
         return None, exc
 
 
+async def _redownload_for_album(items: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Used when Telegram rejects the whole album while fetching item URLs
+    itself — the single most common reason sendMediaGroup fails wholesale for
+    scraped news images (hotlink protection, unusual user-agent checks, rate
+    limiting Telegram's own fetcher differently — see _download_media).
+    Downloads every item's bytes ourselves in parallel so the album can be
+    retried without relying on Telegram's server-side fetch. Items that can't
+    be downloaded at all are dropped instead of blocking the rest of the
+    album. Returns (items-with-"file"-key, dropped)."""
+    files = await asyncio.gather(*(_download_media(item["url"]) for item in items))
+    successful: list[dict] = []
+    dropped: list[dict] = []
+    for item, input_file in zip(items, files):
+        if input_file is None:
+            dropped.append(_dropped(item, RuntimeError("media unreachable for re-upload")))
+        else:
+            successful.append({**item, "file": input_file})
+    return successful, dropped
+
+
 async def _send_album_with_fallback(
     bot: Bot, chat_id: int, text: str, items: list[dict]
 ) -> tuple[list[int], list[dict]]:
     """sendMediaGroup fails as a whole if even one item is bad — Telegram gives no
-    per-item indication of which — so on failure this retries item-by-item
-    (each with the download-and-reupload fallback from _send_one) and drops
-    whichever ones still fail, rather than losing the whole post."""
+    per-item indication of which — so on failure this re-downloads every item's
+    bytes ourselves and retries the album with those instead of Telegram fetching
+    the URLs itself, dropping only whichever items truly can't be fetched at all.
+    Only if that retry still leaves fewer than two items (or itself fails) does
+    this give up on grouping and fall back to sending items one-by-one."""
     try:
         album_messages = await bot.send_media_group(chat_id, _build_media_group(items, text))
         return [m.message_id for m in album_messages], []
     except TelegramBadRequest:
         pass
 
+    downloaded, dropped = await _redownload_for_album(items)
+    if len(downloaded) >= 2:
+        try:
+            album_messages = await bot.send_media_group(chat_id, _build_media_group(downloaded, text))
+            return [m.message_id for m in album_messages], dropped
+        except TelegramBadRequest:
+            pass
+
     message_ids: list[int] = []
-    dropped: list[dict] = []
+    dropped = []
     for item in items:
         send = bot.send_video if item["type"] == "video" else bot.send_photo
         caption = text if not message_ids else None
