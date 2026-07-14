@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import httpx
+
 from app import models
 from app.database import SessionLocal
 from app.services import filters as filters_service
@@ -26,8 +28,25 @@ def fetch_all_active_sources() -> None:
         db.close()
 
 
-@celery_app.task(name="app.tasks.parsing.fetch_source")
-def fetch_source(source_id: int) -> None:
+def _is_transient_network_error(exc: BaseException) -> bool:
+    """DNS/connection hiccups (e.g. the resolver briefly failing inside the
+    container) should be retried quickly rather than treated as a dead
+    source — they show up as OSError (feedparser/urllib) or httpx.TransportError,
+    sometimes wrapped as the __cause__/__context__ of another exception."""
+    seen: BaseException | None = exc
+    while seen is not None:
+        if isinstance(seen, (OSError, httpx.TransportError)):
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
+
+
+@celery_app.task(
+    name="app.tasks.parsing.fetch_source",
+    bind=True,
+    max_retries=3,
+)
+def fetch_source(self, source_id: int) -> None:
     from app.tasks.ai_processing import process_pending_posts
 
     db = SessionLocal()
@@ -42,6 +61,8 @@ def fetch_source(source_id: int) -> None:
         try:
             items = get_parser(source.type).fetch(source)
         except Exception as exc:
+            if _is_transient_network_error(exc) and self.request.retries < self.max_retries:
+                raise self.retry(exc=exc, countdown=10 * (2 ** self.request.retries))
             log(db, "error", f"Failed to fetch source '{source.name}': {exc}", "parsing", {"source_id": source.id})
             source.last_checked = datetime.now(timezone.utc)
             db.commit()

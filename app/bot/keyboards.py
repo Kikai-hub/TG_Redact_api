@@ -76,6 +76,45 @@ def media_edit_keyboard(post_id: int, media: list[dict] | None) -> InlineKeyboar
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+# callback_data format: "schedmod:<action>:<post_id>" — action in
+# {reschedule, cancel, cancel_confirm, cancel_back}, shown on posts already in
+# "scheduled" status (opened from the "🕒 Отложка" list).
+SCHEDULED_MOD_CALLBACK_PREFIX = "schedmod"
+
+
+def scheduled_post_keyboard(post_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🕒 Изменить время",
+                    callback_data=f"{SCHEDULED_MOD_CALLBACK_PREFIX}:reschedule:{post_id}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отменить публикацию",
+                    callback_data=f"{SCHEDULED_MOD_CALLBACK_PREFIX}:cancel:{post_id}",
+                ),
+            ]
+        ]
+    )
+
+
+def scheduled_cancel_confirm_keyboard(post_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="❌ Да, отменить",
+                    callback_data=f"{SCHEDULED_MOD_CALLBACK_PREFIX}:cancel_confirm:{post_id}",
+                ),
+                InlineKeyboardButton(
+                    text="◀️ Назад", callback_data=f"{SCHEDULED_MOD_CALLBACK_PREFIX}:cancel_back:{post_id}"
+                ),
+            ]
+        ]
+    )
+
+
 # callback_data format: "modall:<action>" — action in {confirm, cancel}
 REJECT_ALL_CALLBACK_PREFIX = "modall"
 

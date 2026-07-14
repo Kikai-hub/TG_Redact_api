@@ -17,6 +17,8 @@ from app.bot.keyboards import (
     post_list_keyboard,
     publish_choice_keyboard,
     reject_all_confirm_keyboard,
+    scheduled_cancel_confirm_keyboard,
+    scheduled_post_keyboard,
 )
 from app.database import SessionLocal
 from app.services import settings_store
@@ -93,8 +95,7 @@ def _media_edit_prompt_text(post: models.Post) -> str:
 async def _open_post_card(message: Message, db, post: models.Post, keyboard: InlineKeyboardMarkup | None) -> None:
     """Sends the post's full text + media as a fresh message — reused by the
     "🆕 Новые"/"🕒 Отложка" list callbacks and by the edit flow. keyboard=None
-    renders a read-only preview (used for already-scheduled posts, where the
-    moderation actions no longer apply)."""
+    renders a read-only preview (no actions apply for that post's status)."""
     token = settings_store.get_secret_setting(db, "telegram_bot_token")
     ai_data = post.ai_processed_text or {}
     if token:
@@ -141,6 +142,9 @@ async def cmd_help(message: Message) -> None:
         f"Для отложенной публикации присылай дату и время в формате {SCHEDULE_TIME_FORMAT_HINT} "
         "по московскому времени (МСК) — сервер стоит в Нидерландах и хранит всё в UTC, "
         "но бот сам пересчитает.\n\n"
+        f"Открыв пост уже из «{SCHEDULED_BUTTON}», можно:\n"
+        "🕒 Изменить время — прислать новую дату/время публикации\n"
+        "❌ Отменить публикацию — снять пост с расписания (вернётся на модерацию, спросит подтверждение)\n\n"
         "/reject_all — отклонить разом все посты, ожидающие модерации"
     )
 
@@ -271,8 +275,64 @@ async def handle_open_scheduled_post(callback: CallbackQuery) -> None:
         if post is None or post.status != models.PostStatus.scheduled.value:
             await callback.answer("Пост уже обработан.", show_alert=True)
             return
-        await _open_post_card(callback.message, db, post, None)
+        await _open_post_card(callback.message, db, post, scheduled_post_keyboard(post.id))
         await callback.answer()
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("schedmod:"))
+async def handle_scheduled_post_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    _, action, post_id_str = callback.data.split(":")
+    post_id = int(post_id_str)
+
+    db = SessionLocal()
+    try:
+        admin = _get_admin(db, callback.from_user.id)
+        if admin is None or admin.role not in ("moderator", "admin"):
+            await callback.answer("Недостаточно прав", show_alert=True)
+            return
+
+        post = db.get(models.Post, post_id)
+        if post is None or post.status != models.PostStatus.scheduled.value:
+            await callback.answer("Пост уже обработан.", show_alert=True)
+            return
+
+        if action == "reschedule":
+            await state.update_data(scheduling_post_id=post.id, rescheduling=True)
+            await state.set_state(ModerationStates.waiting_for_schedule_time)
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.message.answer(
+                f"Укажите новую дату и время публикации поста #{post.id} в формате {SCHEDULE_TIME_FORMAT_HINT} "
+                "(по московскому времени, МСК). Например: 10.07.2026 18:30"
+            )
+            await callback.answer()
+
+        elif action == "cancel":
+            await callback.message.edit_reply_markup(reply_markup=scheduled_cancel_confirm_keyboard(post.id))
+            await callback.answer()
+
+        elif action == "cancel_back":
+            await callback.message.edit_reply_markup(reply_markup=scheduled_post_keyboard(post.id))
+            await callback.answer()
+
+        elif action == "cancel_confirm":
+            post.status = models.PostStatus.moderated.value
+            post.scheduled_at = None
+            post.scheduled_by = None
+            db.commit()
+            log(
+                db, "info", f"Scheduled publication of post {post.id} cancelled by {admin.username}", "moderation",
+                {"post_id": post.id, "admin": admin.username},
+            )
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.message.answer(
+                f"🚫 Публикация поста #{post.id} отменена, пост возвращён на модерацию "
+                f"(смотри его снова в «{NEW_POSTS_BUTTON}»)."
+            )
+            await callback.answer()
+        else:
+            await callback.answer()
     finally:
         db.close()
 
@@ -544,6 +604,7 @@ async def handle_edit_media(message: Message, state: FSMContext) -> None:
 async def handle_schedule_time(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     post_id = data.get("scheduling_post_id")
+    rescheduling = data.get("rescheduling", False)
 
     try:
         scheduled_at_msk = datetime.strptime((message.text or "").strip(), SCHEDULE_TIME_FORMAT).replace(
@@ -571,7 +632,10 @@ async def handle_schedule_time(message: Message, state: FSMContext) -> None:
         if admin is None or post is None:
             await message.answer("Не удалось запланировать — пост или права не найдены.")
             return
-        if post.status != models.PostStatus.moderated.value:
+        expected_status = (
+            models.PostStatus.scheduled.value if rescheduling else models.PostStatus.moderated.value
+        )
+        if post.status != expected_status:
             await message.answer("Пост уже обработан другим модератором.")
             return
 
@@ -580,11 +644,14 @@ async def handle_schedule_time(message: Message, state: FSMContext) -> None:
         post.scheduled_by = admin.username
         db.commit()
         log(
-            db, "info", f"Post {post.id} scheduled for {scheduled_at.isoformat()} by {admin.username}",
+            db, "info",
+            f"Post {post.id} {'rescheduled' if rescheduling else 'scheduled'} for {scheduled_at.isoformat()} "
+            f"by {admin.username}",
             "moderation", {"post_id": post.id, "admin": admin.username, "scheduled_at": scheduled_at.isoformat()},
         )
+        verb = "перенесён" if rescheduling else "запланирован"
         await message.answer(
-            f"🕒 Пост #{post.id} запланирован на {scheduled_at_msk.strftime(SCHEDULE_TIME_FORMAT)} МСК "
+            f"🕒 Пост #{post.id} {verb} на {scheduled_at_msk.strftime(SCHEDULE_TIME_FORMAT)} МСК "
             f"({scheduled_at.strftime(SCHEDULE_TIME_FORMAT)} UTC — так это время будет выглядеть в веб-панели)."
         )
     finally:
