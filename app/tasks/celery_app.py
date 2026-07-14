@@ -43,4 +43,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.cleanup.purge_old_rejected_posts",
         "schedule": crontab(hour=3, minute=30),
     },
+    "tick-auto-reject-stale-moderated-posts": {
+        "task": "app.tasks.cleanup.auto_reject_stale_moderated_posts",
+        "schedule": crontab(minute="*/15"),
+    },
 }

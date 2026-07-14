@@ -37,6 +37,10 @@ DEFAULTS: dict[str, object] = {
     "parse_interval_minutes": 45,
     "dedup_window_days": 7,
     "max_posts_per_cycle": 50,
+    # Posts sitting in "moderated" (awaiting a moderator) longer than this are
+    # auto-rejected by app.tasks.cleanup.auto_reject_stale_moderated_posts —
+    # 0 disables the check.
+    "moderation_timeout_hours": 24,
     "update_requested": None,
 }
 # ai_provider / ai_api_base are seeded from the AI_PROVIDER / AI_API_BASE env

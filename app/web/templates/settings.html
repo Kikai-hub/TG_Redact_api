@@ -107,6 +107,13 @@
         <label class="form-label">Макс. постов за цикл на источник</label>
         <input class="form-control" type="number" name="max_posts_per_cycle" value="{{ values.max_posts_per_cycle }}">
       </div>
+      <div class="col-md-4">
+        <label class="form-label">Автоотклонение через (часов)</label>
+        <input class="form-control" type="number" name="moderation_timeout_hours" value="{{ values.moderation_timeout_hours }}">
+        <small class="text-muted d-block mt-1">
+          Пост, который никто не рассмотрел за это время, автоматически уходит в отклонённые. 0 — выключить.
+        </small>
+      </div>
     </div>
   </div>
 

@@ -415,6 +415,7 @@ def settings_save(
     parse_interval_minutes: int = Form(...),
     dedup_window_days: int = Form(...),
     max_posts_per_cycle: int = Form(...),
+    moderation_timeout_hours: int = Form(...),
     db: Session = Depends(get_db),
 ):
     admin, redirect = _require_role(request, db, "admin")
@@ -447,6 +448,7 @@ def settings_save(
     settings_store.set_setting(db, "parse_interval_minutes", parse_interval_minutes)
     settings_store.set_setting(db, "dedup_window_days", dedup_window_days)
     settings_store.set_setting(db, "max_posts_per_cycle", max_posts_per_cycle)
+    settings_store.set_setting(db, "moderation_timeout_hours", moderation_timeout_hours)
 
     # Secret fields: blank submission = leave unchanged; the "clear" checkbox
     # is the only way to wipe a stored secret. The actual/masked value is
